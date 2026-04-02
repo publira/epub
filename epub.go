@@ -25,12 +25,12 @@ import (
 //
 // Assets uses the manifest href as the map key.
 type Document struct {
-	Title     string
+	Title      string
 	Identifier string
-	Direction string // "rtl" (right-to-left) or "ltr".
-	Layout    LayoutType
-	Pages     []*Page
-	Assets    map[string]*Asset
+	Direction  string // "rtl" (right-to-left) or "ltr".
+	Layout     LayoutType
+	Pages      []*Page
+	Assets     map[string]*Asset
 }
 
 // LayoutType represents rendition:layout in OPF metadata.
