@@ -96,7 +96,8 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		normalizedManifest = append(normalizedManifest, it)
 	}
 
-	if err := validateCompliance(cfg.compliance, fileSet, manifestByHref); err != nil {
+	complianceWarnings, err := validateCompliance(cfg.compliance, fileSet, manifestByHref, filesByName)
+	if err != nil {
 		return nil, err
 	}
 
@@ -107,7 +108,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		Layout:     parseLayoutType(pkg.Metadata.Meta),
 		Pages:      make([]*Page, 0, len(pkg.Spine.Itemrefs)),
 		Assets:     make(map[string]*Asset, len(normalizedManifest)),
-		Warnings:   make([]string, 0),
+		Warnings:   append(warnings, *complianceWarnings...),
 	}
 
 	for _, item := range normalizedManifest {

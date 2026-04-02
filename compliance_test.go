@@ -3,6 +3,7 @@
 package epub
 
 import (
+	"archive/zip"
 	"errors"
 	"testing"
 )
@@ -14,7 +15,9 @@ func TestValidateCompliance_FlexibleAllows(t *testing.T) {
 	files := map[string]struct{}{
 		"weird/path/foo.jpg": {},
 	}
-	if err := validateCompliance(LevelFlexible, files, manifest); err != nil {
+	filesByName := make(map[string]*zip.File)
+	_, err := validateCompliance(LevelFlexible, files, manifest, filesByName)
+	if err != nil {
 		t.Fatalf("expected nil in flexible mode, got: %v", err)
 	}
 }
@@ -26,7 +29,8 @@ func TestValidateCompliance_EBPAJDirectoryViolation(t *testing.T) {
 	files := map[string]struct{}{
 		"foo/bar.jpg": {},
 	}
-	err := validateCompliance(LevelEBPAJ, files, manifest)
+	filesByName := make(map[string]*zip.File)
+	_, err := validateCompliance(LevelEBPAJ, files, manifest, filesByName)
 	if err == nil {
 		t.Fatal("expected directory-layout error")
 	}
@@ -44,7 +48,8 @@ func TestValidateCompliance_MissingPhysicalFile(t *testing.T) {
 		"item/image/p-001.jpg": {Href: "item/image/p-001.jpg", MediaType: "image/jpeg"},
 	}
 	files := map[string]struct{}{}
-	err := validateCompliance(LevelKADOKAWA, files, manifest)
+	filesByName := make(map[string]*zip.File)
+	_, err := validateCompliance(LevelKADOKAWA, files, manifest, filesByName)
 	if err == nil {
 		t.Fatal("expected manifest-physical-existence error")
 	}

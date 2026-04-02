@@ -164,3 +164,77 @@ func (e *DecodeError) Error() string {
 }
 
 func (e *DecodeError) Unwrap() error { return e.Err }
+
+// ErrImagePixelCountExceeded is returned when image pixel count exceeds the limit.
+type ErrImagePixelCountExceeded struct {
+	Href    string
+	Limit   int64
+	Actual  int64
+}
+
+func (e *ErrImagePixelCountExceeded) Error() string {
+	if e == nil || e.Href == "" {
+		return "image pixel count exceeds limit"
+	}
+	return fmt.Sprintf("image %q pixel count exceeds limit: %d > %d", e.Href, e.Actual, e.Limit)
+}
+
+func (e *ErrImagePixelCountExceeded) Is(target error) bool {
+	_, ok := target.(*ErrImagePixelCountExceeded)
+	return ok
+}
+
+// ErrImageFileSizeTooLarge is returned when image file size exceeds the limit.
+type ErrImageFileSizeTooLarge struct {
+	Href    string
+	Limit   int64
+	Actual  int64
+}
+
+func (e *ErrImageFileSizeTooLarge) Error() string {
+	if e == nil || e.Href == "" {
+		return "image file size exceeds limit"
+	}
+	return fmt.Sprintf("image %q file size exceeds limit: %d > %d bytes", e.Href, e.Actual, e.Limit)
+}
+
+func (e *ErrImageFileSizeTooLarge) Is(target error) bool {
+	_, ok := target.(*ErrImageFileSizeTooLarge)
+	return ok
+}
+
+// ErrProgressiveJPEGNotAllowed is returned when a progressive JPEG is detected.
+type ErrProgressiveJPEGNotAllowed struct {
+	Href string
+}
+
+func (e *ErrProgressiveJPEGNotAllowed) Error() string {
+	if e == nil || e.Href == "" {
+		return "progressive JPEG is not allowed"
+	}
+	return fmt.Sprintf("image %q: progressive JPEG is not allowed", e.Href)
+}
+
+func (e *ErrProgressiveJPEGNotAllowed) Is(target error) bool {
+	_, ok := target.(*ErrProgressiveJPEGNotAllowed)
+	return ok
+}
+
+// ErrInvalidColorSpace is returned when image has invalid color space.
+type ErrInvalidColorSpace struct {
+	Href      string
+	Expected  string
+	Actual    string
+}
+
+func (e *ErrInvalidColorSpace) Error() string {
+	if e == nil || e.Href == "" {
+		return "invalid color space"
+	}
+	return fmt.Sprintf("image %q has invalid color space: expected %s, got %s", e.Href, e.Expected, e.Actual)
+}
+
+func (e *ErrInvalidColorSpace) Is(target error) bool {
+	_, ok := target.(*ErrInvalidColorSpace)
+	return ok
+}
