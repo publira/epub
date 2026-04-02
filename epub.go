@@ -145,10 +145,10 @@ func (d *Document) AddAsset(mimeType string, r io.ReaderAt, size int64) (string,
 
 // AddPageWithAsset registers an asset and appends its page in one call.
 //
-// mime type, byte size, and viewport width/height are derived from r.
+// mime type and viewport width/height are derived from r.
 // If page creation fails after asset registration, the asset is rolled back.
-func (d *Document) AddPageWithAsset(r io.ReaderAt, spread string) (*Page, *Asset, error) {
-	mimeType, size, width, height, err := detectAssetMeta(r)
+func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*Page, *Asset, error) {
+	mimeType, width, height, err := detectAssetMeta(r, size)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -168,16 +168,12 @@ func (d *Document) AddPageWithAsset(r io.ReaderAt, spread string) (*Page, *Asset
 	return page, asset, nil
 }
 
-func detectAssetMeta(r io.ReaderAt) (mimeType string, size int64, width int, height int, err error) {
+func detectAssetMeta(r io.ReaderAt, size int64) (mimeType string, width int, height int, err error) {
 	if r == nil {
-		return "", 0, 0, 0, ErrNilReaderAt
-	}
-	size, err = readerAtSize(r)
-	if err != nil {
-		return "", 0, 0, 0, err
+		return "", 0, 0, ErrNilReaderAt
 	}
 	if size <= 0 {
-		return "", 0, 0, 0, ErrInvalidAssetSize
+		return "", 0, 0, ErrInvalidAssetSize
 	}
 
 	headLen := int64(512)
@@ -187,18 +183,18 @@ func detectAssetMeta(r io.ReaderAt) (mimeType string, size int64, width int, hei
 	head := make([]byte, headLen)
 	n, err := r.ReadAt(head, 0)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return "", 0, 0, 0, err
+		return "", 0, 0, err
 	}
 	mimeType = http.DetectContentType(head[:n])
 	if !strings.HasPrefix(mimeType, "image/") {
-		return "", 0, 0, 0, ErrCannotInferAssetPath
+		return "", 0, 0, ErrCannotInferAssetPath
 	}
 
 	cfg, _, err := image.DecodeConfig(io.NewSectionReader(r, 0, size))
 	if err != nil {
-		return "", 0, 0, 0, err
+		return "", 0, 0, err
 	}
-	return mimeType, size, cfg.Width, cfg.Height, nil
+	return mimeType, cfg.Width, cfg.Height, nil
 }
 
 func readerAtSize(r io.ReaderAt) (int64, error) {

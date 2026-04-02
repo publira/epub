@@ -56,7 +56,8 @@ func TestEncodeDecode_RoundTripBasic(t *testing.T) {
 		Direction: "ltr",
 		Layout:    LayoutPrePaginated,
 	}
-	page, asset, err := doc.AddPageWithAsset(bytes.NewReader(testPNGBytes()), "right")
+	png := testPNGBytes()
+	page, asset, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
 	if err != nil {
 		t.Fatalf("AddPageWithAsset failed: %v", err)
 	}

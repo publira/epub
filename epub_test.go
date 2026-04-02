@@ -54,7 +54,7 @@ func TestAddPageWithAssetSharesID(t *testing.T) {
 	}
 	r := bytes.NewReader(pngBytes)
 
-	page, asset, err := doc.AddPageWithAsset(r, "left")
+	page, asset, err := doc.AddPageWithAsset(r, int64(r.Len()), "left")
 	if err != nil {
 		t.Fatalf("AddPageWithAsset returned error: %v", err)
 	}

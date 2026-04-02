@@ -73,6 +73,7 @@ For fixed-layout workflows, you can add both asset and page in one call:
 ```go
 _, _, err = doc.AddPageWithAsset(
 	img,
+	st.Size(),
 	"right",
 )
 if err != nil {

@@ -35,7 +35,7 @@ func ExampleDocument_AddPageWithAsset() {
 	pngBytes, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Zk7kAAAAASUVORK5CYII=")
 	img := bytes.NewReader(pngBytes)
 
-	page, asset, err := doc.AddPageWithAsset(img, "right")
+	page, asset, err := doc.AddPageWithAsset(img, int64(img.Len()), "right")
 	if err != nil {
 		fmt.Println("error")
 		return

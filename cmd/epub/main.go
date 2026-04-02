@@ -290,13 +290,13 @@ func runBuildFromImages(args []string) error {
 	}()
 
 	for _, p := range imagePaths {
-		f, _, err := openReaderAt(p)
+		f, size, err := openReaderAt(p)
 		if err != nil {
 			return err
 		}
 		openFiles = append(openFiles, f)
 
-		if _, _, err := doc.AddPageWithAsset(f, spreadNorm); err != nil {
+		if _, _, err := doc.AddPageWithAsset(f, size, spreadNorm); err != nil {
 			return err
 		}
 	}
