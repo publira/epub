@@ -60,6 +60,39 @@ func (d *Document) IsPrePaginated() bool {
 	return d != nil && d.Layout == LayoutPrePaginated
 }
 
+// GetAssetByPage resolves the corresponding asset from the given page reference.
+func (d *Document) GetAssetByPage(p *Page) (*Asset, error) {
+	if d == nil {
+		return nil, ErrNilDocument
+	}
+	if p == nil {
+		return nil, ErrNilPage
+	}
+	if strings.TrimSpace(p.AssetID) == "" {
+		return nil, ErrEmptyAssetID
+	}
+
+	for _, a := range d.Assets {
+		if a != nil && a.ID == p.AssetID {
+			return a, nil
+		}
+	}
+	return nil, ErrAssetNotFound
+}
+
+// ResolveSpineAssets verifies that all pages in spine can resolve to existing assets.
+func (d *Document) ResolveSpineAssets() error {
+	if d == nil {
+		return ErrNilDocument
+	}
+	for i, p := range d.Pages {
+		if _, err := d.GetAssetByPage(p); err != nil {
+			return fmt.Errorf("page[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
 // AddPage appends a new page and automatically assigns reading order.
 //
 // For reflowable content, width/height can be 0 and spread can be empty.

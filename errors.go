@@ -30,6 +30,8 @@ var (
 	ErrNilAssetOpen = errors.New("asset Open function is nil")
 	// ErrNilDocument is returned when document receiver is nil.
 	ErrNilDocument = errors.New("document is nil")
+	// ErrNilPage is returned when page argument is nil.
+	ErrNilPage = errors.New("page is nil")
 	// ErrEmptyAssetID is returned when page asset id is empty.
 	ErrEmptyAssetID = errors.New("asset id is empty")
 	// ErrInvalidSpread is returned when page spread is unsupported.

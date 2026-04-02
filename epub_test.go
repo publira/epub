@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -77,4 +78,102 @@ func TestAddAssetUnsupportedMime(t *testing.T) {
 	if !errors.Is(err, ErrCannotInferAssetPath) {
 		t.Fatalf("expected ErrCannotInferAssetPath, got: %v", err)
 	}
+}
+
+func TestDocumentGetAssetByPage(t *testing.T) {
+	doc := &Document{}
+	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Zk7kAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatalf("decode png fixture: %v", err)
+	}
+
+	page, asset, err := doc.AddPageWithAsset(bytes.NewReader(pngBytes), int64(len(pngBytes)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset returned error: %v", err)
+	}
+
+	resolved, err := doc.GetAssetByPage(page)
+	if err != nil {
+		t.Fatalf("GetAssetByPage returned error: %v", err)
+	}
+	if resolved != asset {
+		t.Fatal("resolved asset pointer should match returned asset")
+	}
+}
+
+func TestDocumentGetAssetByPageErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		doc  *Document
+		page *Page
+		want error
+	}{
+		{
+			name: "nil document",
+			doc:  nil,
+			page: &Page{AssetID: "p-001"},
+			want: ErrNilDocument,
+		},
+		{
+			name: "nil page",
+			doc:  &Document{},
+			page: nil,
+			want: ErrNilPage,
+		},
+		{
+			name: "empty asset id",
+			doc:  &Document{},
+			page: &Page{AssetID: ""},
+			want: ErrEmptyAssetID,
+		},
+		{
+			name: "asset not found",
+			doc:  &Document{Assets: map[string]*Asset{"item/image/p-002.jpg": {ID: "p-002", Open: func() (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("x")), nil }}}},
+			page: &Page{AssetID: "p-001"},
+			want: ErrAssetNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.doc.GetAssetByPage(tt.page)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("expected %v, got: %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestDocumentResolveSpineAssets(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		doc := &Document{}
+		pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Zk7kAAAAASUVORK5CYII=")
+		if err != nil {
+			t.Fatalf("decode png fixture: %v", err)
+		}
+		if _, _, err := doc.AddPageWithAsset(bytes.NewReader(pngBytes), int64(len(pngBytes)), "none"); err != nil {
+			t.Fatalf("AddPageWithAsset returned error: %v", err)
+		}
+
+		if err := doc.ResolveSpineAssets(); err != nil {
+			t.Fatalf("ResolveSpineAssets returned error: %v", err)
+		}
+	})
+
+	t.Run("invalid reference", func(t *testing.T) {
+		doc := &Document{
+			Pages: []*Page{{Order: 0, AssetID: "p-001"}},
+			Assets: map[string]*Asset{
+				"item/image/p-002.jpg": {
+					ID:       "p-002",
+					MimeType: "image/jpeg",
+				},
+			},
+		}
+
+		err := doc.ResolveSpineAssets()
+		if !errors.Is(err, ErrAssetNotFound) {
+			t.Fatalf("expected ErrAssetNotFound, got: %v", err)
+		}
+	})
 }
