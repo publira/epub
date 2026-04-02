@@ -23,9 +23,9 @@ var imageNamePatternKADOKAWA = regexp.MustCompile(`^item/image/[a-z][a-z0-9_-]*\
 
 // Image spec constants (Issue #5 requirements)
 const (
-	maxImagePixelCount  = 4000000
-	maxImageFileSize    = 4 * 1024 * 1024       // 4MB
-	maxXHTMLFileSize    = 256 * 1024            // 256KB
+	maxImagePixelCount = 4000000
+	maxImageFileSize   = 4 * 1024 * 1024 // 4MB
+	maxXHTMLFileSize   = 256 * 1024      // 256KB
 )
 
 func validateCompliance(level ComplianceLevel, files map[string]struct{}, manifest map[string]manifestItem, filesByName map[string]*zip.File) (*[]string, error) {
@@ -185,7 +185,7 @@ func validateJPEGSpecs(r io.Reader, href string) error {
 				return &DecodeError{
 					Path: href,
 					Rule: "jpeg-progressive",
-					Err: &ErrProgressiveJPEGNotAllowed{Href: href},
+					Err:  &ErrProgressiveJPEGNotAllowed{Href: href},
 				}
 			}
 		}

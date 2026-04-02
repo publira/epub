@@ -167,9 +167,9 @@ func (e *DecodeError) Unwrap() error { return e.Err }
 
 // ErrImagePixelCountExceeded is returned when image pixel count exceeds the limit.
 type ErrImagePixelCountExceeded struct {
-	Href    string
-	Limit   int64
-	Actual  int64
+	Href   string
+	Limit  int64
+	Actual int64
 }
 
 func (e *ErrImagePixelCountExceeded) Error() string {
@@ -186,9 +186,9 @@ func (e *ErrImagePixelCountExceeded) Is(target error) bool {
 
 // ErrImageFileSizeTooLarge is returned when image file size exceeds the limit.
 type ErrImageFileSizeTooLarge struct {
-	Href    string
-	Limit   int64
-	Actual  int64
+	Href   string
+	Limit  int64
+	Actual int64
 }
 
 func (e *ErrImageFileSizeTooLarge) Error() string {
@@ -222,9 +222,9 @@ func (e *ErrProgressiveJPEGNotAllowed) Is(target error) bool {
 
 // ErrInvalidColorSpace is returned when image has invalid color space.
 type ErrInvalidColorSpace struct {
-	Href      string
-	Expected  string
-	Actual    string
+	Href     string
+	Expected string
+	Actual   string
 }
 
 func (e *ErrInvalidColorSpace) Error() string {
