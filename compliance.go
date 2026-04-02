@@ -58,8 +58,8 @@ func validateCompliance(level ComplianceLevel, files map[string]struct{}, manife
 			// Check XHTML file size and add warning if it exceeds 256KB
 			zf := filesByName[href]
 			if zf != nil {
-				if zf.UncompressedSize > maxXHTMLFileSize {
-					warning := "XHTML file " + href + " exceeds 256KB (" + formatBytes(int64(zf.UncompressedSize)) + "), may cause RS performance issues"
+				if zf.UncompressedSize64 > uint64(maxXHTMLFileSize) {
+					warning := "XHTML file " + href + " exceeds 256KB (" + formatBytes(int64(zf.UncompressedSize64)) + "), may cause RS performance issues"
 					warnings = append(warnings, warning)
 				}
 			}
@@ -113,14 +113,14 @@ func validateDirectoryRule(href string) error {
 // - Enforce sRGB and prohibit Progressive JPEG
 func validateImageSpecs(zf *zip.File, href string) error {
 	// Check file size
-	if int64(zf.UncompressedSize) > maxImageFileSize {
+	if zf.UncompressedSize64 > uint64(maxImageFileSize) {
 		return &DecodeError{
 			Path: href,
 			Rule: "image-file-size",
 			Err: &ErrImageFileSizeTooLarge{
 				Href:   href,
 				Limit:  maxImageFileSize,
-				Actual: int64(zf.UncompressedSize),
+				Actual: int64(zf.UncompressedSize64),
 			},
 		}
 	}
