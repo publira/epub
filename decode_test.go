@@ -44,6 +44,39 @@ func TestDecode_PrePaginatedViewport(t *testing.T) {
 	}
 }
 
+func TestDecode_PageHrefAndExtractReferencedImagesFromSpine(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{
+		mimetypeFirst:    true,
+		prePaginated:     true,
+		withViewport:     true,
+		embeddedImageSrc: "../image/p-001.jpg",
+	})
+	doc, err := Decode(bytes.NewReader(epubData), int64(len(epubData)))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if doc.Pages[0].Href != "item/xhtml/p-001.xhtml" {
+		t.Fatalf("unexpected page href: %s", doc.Pages[0].Href)
+	}
+
+	refs, err := doc.ExtractReferencedImagesFromSpine()
+	if err != nil {
+		t.Fatalf("ExtractReferencedImagesFromSpine failed: %v", err)
+	}
+	if len(refs) != 1 {
+		t.Fatalf("unexpected refs len: %d", len(refs))
+	}
+	if refs[0].Href != "item/image/p-001.jpg" {
+		t.Fatalf("unexpected image href: %s", refs[0].Href)
+	}
+	if refs[0].Asset == nil || refs[0].Asset.ID != "p-001" {
+		t.Fatalf("unexpected image asset: %#v", refs[0].Asset)
+	}
+	if refs[0].Page != doc.Pages[0] {
+		t.Fatal("expected reference to point to first page")
+	}
+}
+
 func TestDecode_MimetypeNotFirst(t *testing.T) {
 	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: false})
 	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)))
@@ -76,11 +109,12 @@ func TestDecode_EBPAJImageNamingViolation(t *testing.T) {
 }
 
 type minimalEPUBConfig struct {
-	mimetypeFirst   bool
-	mimetypeDeflate bool
-	prePaginated    bool
-	withViewport    bool
-	imageHref       string
+	mimetypeFirst    bool
+	mimetypeDeflate  bool
+	prePaginated     bool
+	withViewport     bool
+	imageHref        string
+	embeddedImageSrc string
 }
 
 func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
@@ -108,7 +142,12 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 	}
 	xhtml += `
 </head>
-<body><p>hello</p></body>
+<body><p>hello</p>`
+	if cfg.embeddedImageSrc != "" {
+		xhtml += `
+<img src="` + cfg.embeddedImageSrc + `" alt="embedded"/>`
+	}
+	xhtml += `</body>
 </html>`
 
 	opf := `<?xml version="1.0" encoding="UTF-8"?>

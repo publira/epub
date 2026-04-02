@@ -81,6 +81,19 @@ if err != nil {
 }
 ```
 
+When a spine item is XHTML, you can still resolve the referenced page images:
+
+```go
+refs, err := doc.ExtractReferencedImagesFromSpine()
+if err != nil {
+	log.Fatal(err)
+}
+
+for _, ref := range refs {
+	fmt.Println(ref.Page.Order, ref.Page.Href, ref.Href, ref.Asset.ID)
+}
+```
+
 ## Demo CLI
 
 The CLI lives under [cmd/epub](cmd/epub) and has its own documentation:

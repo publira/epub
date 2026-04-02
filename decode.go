@@ -106,7 +106,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		if !ok {
 			return nil, &DecodeError{Path: opfPath, Rule: "spine-idref", Err: ErrAssetNotFound}
 		}
-		page := &Page{Order: i, AssetID: item.ID, Spread: spreadFromProperties(ref.Properties)}
+		page := &Page{Order: i, AssetID: item.ID, Href: item.Href, Spread: spreadFromProperties(ref.Properties)}
 		if doc.IsPrePaginated() && strings.Contains(item.MediaType, "xhtml") {
 			width, height, err := readViewport(filesByName, item.Href)
 			if err != nil {

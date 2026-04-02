@@ -91,7 +91,7 @@ func runInspect(args []string) error {
 		}
 		for i := 0; i < limit; i++ {
 			p := doc.Pages[i]
-			fmt.Printf("[%d] asset=%s spread=%s size=%dx%d\n", p.Order, p.AssetID, p.Spread, p.Width, p.Height)
+			fmt.Printf("[%d] asset=%s href=%s spread=%s size=%dx%d\n", p.Order, p.AssetID, p.Href, p.Spread, p.Width, p.Height)
 		}
 	}
 
@@ -155,35 +155,27 @@ func runListImages(args []string) error {
 		Spread   string `json:"spread,omitempty"`
 	}
 
-	idToHref := make(map[string]string, len(doc.Assets))
-	for href, a := range doc.Assets {
-		if a != nil {
-			idToHref[a.ID] = href
-		}
-	}
-
 	rows := make([]imageRow, 0)
 	switch strings.ToLower(strings.TrimSpace(*mode)) {
 	case "pages":
-		for _, p := range doc.Pages {
-			href, ok := idToHref[p.AssetID]
-			if !ok {
-				continue
-			}
-			a := doc.Assets[href]
-			if a == nil || !strings.HasPrefix(a.MimeType, "image/") {
+		refs, err := doc.ExtractReferencedImagesFromSpine()
+		if err != nil {
+			return err
+		}
+		for _, ref := range refs {
+			if ref.Page == nil || ref.Asset == nil {
 				continue
 			}
 			rows = append(rows, imageRow{
-				Order:    p.Order,
-				AssetID:  p.AssetID,
-				Href:     href,
-				MimeType: a.MimeType,
-				Size:     a.Size,
-				Checksum: a.Checksum,
-				Width:    p.Width,
-				Height:   p.Height,
-				Spread:   p.Spread,
+				Order:    ref.Page.Order,
+				AssetID:  ref.Asset.ID,
+				Href:     ref.Href,
+				MimeType: ref.Asset.MimeType,
+				Size:     ref.Asset.Size,
+				Checksum: ref.Asset.Checksum,
+				Width:    ref.Page.Width,
+				Height:   ref.Page.Height,
+				Spread:   ref.Page.Spread,
 			})
 		}
 	case "all":

@@ -62,11 +62,41 @@ func TestAddPageWithAssetSharesID(t *testing.T) {
 	if page.AssetID != asset.ID {
 		t.Fatalf("page asset id (%s) and asset id (%s) must match", page.AssetID, asset.ID)
 	}
+	if page.Href != "item/image/p-001.png" {
+		t.Fatalf("unexpected page href: %s", page.Href)
+	}
 	if page.Spread != "left" {
 		t.Fatalf("unexpected spread: %s", page.Spread)
 	}
 	if page.Width != 1 || page.Height != 1 {
 		t.Fatalf("unexpected viewport: %dx%d", page.Width, page.Height)
+	}
+}
+
+func TestDocumentExtractReferencedImagesFromSpineDirectImage(t *testing.T) {
+	doc := &Document{}
+	pngBytes := testPNGBytes()
+
+	page, asset, err := doc.AddPageWithAsset(bytes.NewReader(pngBytes), int64(len(pngBytes)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset returned error: %v", err)
+	}
+
+	refs, err := doc.ExtractReferencedImagesFromSpine()
+	if err != nil {
+		t.Fatalf("ExtractReferencedImagesFromSpine returned error: %v", err)
+	}
+	if len(refs) != 1 {
+		t.Fatalf("unexpected refs len: %d", len(refs))
+	}
+	if refs[0].Page != page {
+		t.Fatal("expected page pointer to be preserved")
+	}
+	if refs[0].Asset != asset {
+		t.Fatal("expected asset pointer to be preserved")
+	}
+	if refs[0].Href != page.Href {
+		t.Fatalf("unexpected href: %s", refs[0].Href)
 	}
 }
 
