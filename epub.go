@@ -31,6 +31,7 @@ type Document struct {
 	Layout     LayoutType
 	Pages      []*Page
 	Assets     map[string]*Asset
+	Warnings   []string
 }
 
 // LayoutType represents rendition:layout in OPF metadata.

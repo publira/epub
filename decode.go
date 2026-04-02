@@ -10,6 +10,7 @@ import (
 	"io"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -63,13 +64,36 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 
 	manifestByID := make(map[string]manifestItem, len(pkg.Manifest.Items))
 	manifestByHref := make(map[string]manifestItem, len(pkg.Manifest.Items))
+	normalizedManifest := make([]manifestItem, 0, len(pkg.Manifest.Items))
+	warnings := make([]string, 0)
+	warningSet := make(map[string]struct{})
+	addWarning := func(msg string) {
+		msg = strings.TrimSpace(msg)
+		if msg == "" {
+			return
+		}
+		if _, exists := warningSet[msg]; exists {
+			return
+		}
+		warningSet[msg] = struct{}{}
+		warnings = append(warnings, msg)
+	}
 	opfDir := path.Dir(opfPath)
 	for i, it := range pkg.Manifest.Items {
 		href := cleanOPFRef(opfDir, it.Href)
 		it.Href = href
 		pkg.Manifest.Items[i] = it
+		if prev, exists := manifestByID[it.ID]; exists {
+			addWarning(fmt.Sprintf("duplicate manifest id %q: href %q ignored (already defined as %q)", it.ID, it.Href, prev.Href))
+			continue
+		}
+		if prev, exists := manifestByHref[href]; exists {
+			addWarning(fmt.Sprintf("duplicate manifest href %q: id %q ignored (already defined as %q)", it.Href, it.ID, prev.ID))
+			continue
+		}
 		manifestByID[it.ID] = it
 		manifestByHref[href] = it
+		normalizedManifest = append(normalizedManifest, it)
 	}
 
 	if err := validateCompliance(cfg.compliance, fileSet, manifestByHref); err != nil {
@@ -82,10 +106,11 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		Direction:  normalizeDirection(pkg.Spine.PageProgressionDirection),
 		Layout:     parseLayoutType(pkg.Metadata.Meta),
 		Pages:      make([]*Page, 0, len(pkg.Spine.Itemrefs)),
-		Assets:     make(map[string]*Asset, len(pkg.Manifest.Items)),
+		Assets:     make(map[string]*Asset, len(normalizedManifest)),
+		Warnings:   make([]string, 0),
 	}
 
-	for _, item := range pkg.Manifest.Items {
+	for _, item := range normalizedManifest {
 		zfile, ok := filesByName[item.Href]
 		if !ok {
 			return nil, &DecodeError{Path: item.Href, Rule: "manifest-physical-existence", Err: &ErrManifestPhysicalMissing{Href: item.Href}}
@@ -121,6 +146,27 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		}
 		doc.Pages = append(doc.Pages, page)
 	}
+
+	reservedPaths := map[string]struct{}{
+		"mimetype":               {},
+		"META-INF/container.xml": {},
+		opfPath:                  {},
+	}
+	zipNames := make([]string, 0, len(fileSet))
+	for name := range fileSet {
+		zipNames = append(zipNames, name)
+	}
+	sort.Strings(zipNames)
+	for _, name := range zipNames {
+		if _, isReserved := reservedPaths[name]; isReserved {
+			continue
+		}
+		if _, exists := manifestByHref[name]; !exists {
+			addWarning(fmt.Sprintf("archive file %q is not declared in manifest", name))
+		}
+	}
+
+	doc.Warnings = warnings
 
 	return doc, nil
 }

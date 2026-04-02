@@ -108,15 +108,48 @@ func TestDecode_EBPAJImageNamingViolation(t *testing.T) {
 	}
 }
 
+func TestDecode_WarningsCollected(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{
+		mimetypeFirst:       true,
+		duplicateManifestID: true,
+		extraArchiveFile:    "item/image/orphan.jpg",
+	})
+	doc, err := Decode(bytes.NewReader(epubData), int64(len(epubData)))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if len(doc.Warnings) == 0 {
+		t.Fatal("expected warnings to be collected")
+	}
+
+	if !containsWarning(doc.Warnings, "duplicate manifest id \"p-001\"") {
+		t.Fatalf("expected duplicate manifest id warning, got: %#v", doc.Warnings)
+	}
+	if !containsWarning(doc.Warnings, "archive file \"item/image/orphan.jpg\" is not declared in manifest") {
+		t.Fatalf("expected orphan file warning, got: %#v", doc.Warnings)
+	}
+}
+
 type minimalEPUBConfig struct {
-	mimetypeFirst    bool
-	mimetypeDeflate  bool
-	prePaginated     bool
-	withViewport     bool
-	imageHref        string
-	embeddedImageSrc string
-	spineIDRef       string
-	omitImageFile    bool
+	mimetypeFirst       bool
+	mimetypeDeflate     bool
+	prePaginated        bool
+	withViewport        bool
+	imageHref           string
+	embeddedImageSrc    string
+	spineIDRef          string
+	omitImageFile       bool
+	duplicateManifestID bool
+	extraArchiveFile    string
+}
+
+func containsWarning(warnings []string, want string) bool {
+	for _, w := range warnings {
+		if strings.Contains(w, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDecode_MissingManifestPhysicalFileStructuredError(t *testing.T) {
@@ -267,6 +300,12 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 		layout = "pre-paginated"
 	}
 
+	extraManifestItem := ""
+	if cfg.duplicateManifestID {
+		extraManifestItem = `
+		<item id="p-001" href="image/p-dup.jpg" media-type="image/jpeg"/>`
+	}
+
 	xhtml := `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -294,6 +333,7 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
   <manifest>
 		<item id="xhtml-1" href="xhtml/p-001.xhtml" media-type="application/xhtml+xml"/>
 		<item id="p-001" href="` + manifestImageHref + `" media-type="image/jpeg"/>
+		` + extraManifestItem + `
   </manifest>
   <spine page-progression-direction="rtl">
 	    <itemref idref="` + cfg.spineIDRef + `" properties="page-spread-right"/>
@@ -360,6 +400,20 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 			t.Fatalf("create image: %v", err)
 		} else if _, err := w.Write([]byte("fake-jpeg")); err != nil {
 			t.Fatalf("write image: %v", err)
+		}
+	}
+	if cfg.duplicateManifestID {
+		if w, err := zw.Create("item/image/p-dup.jpg"); err != nil {
+			t.Fatalf("create duplicate image: %v", err)
+		} else if _, err := w.Write([]byte("fake-jpeg-dup")); err != nil {
+			t.Fatalf("write duplicate image: %v", err)
+		}
+	}
+	if cfg.extraArchiveFile != "" {
+		if w, err := zw.Create(cfg.extraArchiveFile); err != nil {
+			t.Fatalf("create extra archive file: %v", err)
+		} else if _, err := w.Write([]byte("orphan")); err != nil {
+			t.Fatalf("write extra archive file: %v", err)
 		}
 	}
 
