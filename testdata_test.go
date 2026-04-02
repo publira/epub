@@ -60,10 +60,11 @@ func TestTestdata_KADOKAWACompliance(t *testing.T) {
 		t.Skip("no epub files in testdata/ (see testdata/README.md)")
 	}
 	for _, p := range paths {
-		if !strings.Contains(filepath.Base(p), "kadokawa") {
+		base := filepath.Base(p)
+		if !strings.Contains(base, "kadokawa") {
 			continue
 		}
-		t.Run(filepath.Base(p), func(t *testing.T) {
+		t.Run(base, func(t *testing.T) {
 			f, err := os.Open(p)
 			if err != nil {
 				t.Fatal(err)
@@ -76,6 +77,15 @@ func TestTestdata_KADOKAWACompliance(t *testing.T) {
 			}
 
 			_, err = epub.Decode(f, st.Size(), epub.WithCompliance(epub.LevelKADOKAWA))
+
+			// sizecheck EPUBs intentionally contain oversized images;
+			// they must be rejected by the compliance check.
+			if strings.Contains(base, "sizecheck") {
+				if err == nil {
+					t.Fatal("expected compliance error for sizecheck EPUB, got nil")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("KADOKAWA compliance failed: %v", err)
 			}
