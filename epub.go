@@ -26,6 +26,7 @@ import (
 // Assets uses the manifest href as the map key.
 type Document struct {
 	Title     string
+	Identifier string
 	Direction string // "rtl" (right-to-left) or "ltr".
 	Layout    LayoutType
 	Pages     []*Page

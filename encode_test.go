@@ -6,6 +6,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -83,9 +84,105 @@ func TestEncodeDecode_RoundTripBasic(t *testing.T) {
 	if len(decoded.Pages) != 1 {
 		t.Fatalf("unexpected pages len: %d", len(decoded.Pages))
 	}
-	if len(decoded.Assets) != 1 {
+	if len(decoded.Assets) != 2 {
 		t.Fatalf("unexpected assets len: %d", len(decoded.Assets))
 	}
+}
+
+func TestEncode_GeneratesNavigationDocument(t *testing.T) {
+	doc := &Document{
+		Title:      "Nav Test",
+		Identifier: "E-0001",
+		Direction:  "rtl",
+		Layout:     LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	navContent := readZipEntry(t, out.Bytes(), "item/nav.xhtml")
+	if !strings.Contains(navContent, `<nav epub:type="toc"`) {
+		t.Fatalf("navigation toc is missing: %s", navContent)
+	}
+	if !strings.Contains(navContent, `<nav epub:type="landmarks"`) {
+		t.Fatalf("navigation landmarks is missing: %s", navContent)
+	}
+	if !strings.Contains(navContent, `<h1>Navigation</h1>`) {
+		t.Fatalf("navigation default title is missing: %s", navContent)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opfContent, `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`) {
+		t.Fatalf("opf nav manifest item missing: %s", opfContent)
+	}
+}
+
+func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
+	doc := &Document{
+		Title:      "Legacy TOC",
+		Identifier: "E-2026-0002",
+		Direction:  "ltr",
+		Layout:     LayoutReflowable,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "none"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc, WithLegacyTOC()); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opfContent, `<dc:identifier id="pub-id">E-2026-0002</dc:identifier>`) {
+		t.Fatalf("opf identifier missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`) {
+		t.Fatalf("opf nav.xhtml item missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`) {
+		t.Fatalf("opf ncx item missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<spine page-progression-direction="ltr" toc="ncx">`) {
+		t.Fatalf("opf spine toc attribute missing: %s", opfContent)
+	}
+
+	ncxContent := readZipEntry(t, out.Bytes(), "item/toc.ncx")
+	if !strings.Contains(ncxContent, `<meta name="dtb:uid" content="E-2026-0002"/>`) {
+		t.Fatalf("ncx dtb:uid mismatch: %s", ncxContent)
+	}
+}
+
+func readZipEntry(t *testing.T, data []byte, name string) string {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("zip.NewReader failed: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name != name {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open zip entry %s failed: %v", name, err)
+		}
+		defer rc.Close()
+		b, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("read zip entry %s failed: %v", name, err)
+		}
+		return string(b)
+	}
+	t.Fatalf("zip entry not found: %s", name)
+	return ""
 }
 
 func testPNGBytes() []byte {

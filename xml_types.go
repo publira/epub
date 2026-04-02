@@ -26,8 +26,9 @@ type packageXML struct {
 }
 
 type packageMetadata struct {
-	Title string         `xml:"title"`
-	Meta  []metadataMeta `xml:"meta"`
+	Title      string         `xml:"title"`
+	Identifier string         `xml:"identifier"`
+	Meta       []metadataMeta `xml:"meta"`
 }
 
 type metadataMeta struct {

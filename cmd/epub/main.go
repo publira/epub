@@ -223,6 +223,7 @@ func runBuildFromImages(args []string) error {
 	outPath := fs.String("out", "", "output .epub path")
 	title := fs.String("title", "Untitled", "book title")
 	compliance := fs.String("compliance", "flexible", "flexible|ebpaj|kadokawa")
+	legacyTOC := fs.Bool("legacy-toc", false, "also generate EPUB 2 toc.ncx")
 	direction := fs.String("direction", "rtl", "rtl|ltr")
 	layout := fs.String("layout", "pre-paginated", "pre-paginated|reflowable")
 	spread := fs.String("spread", "right", "left|right|center|none")
@@ -299,7 +300,11 @@ func runBuildFromImages(args []string) error {
 	}
 	defer outFile.Close()
 
-	if err := epub.Encode(outFile, doc); err != nil {
+	encodeOpts := make([]epub.EncodeOption, 0, 1)
+	if *legacyTOC {
+		encodeOpts = append(encodeOpts, epub.WithLegacyTOC())
+	}
+	if err := epub.Encode(outFile, doc, encodeOpts...); err != nil {
 		return err
 	}
 
@@ -325,6 +330,7 @@ func runRepack(args []string) error {
 	inPath := fs.String("in", "", "input .epub path")
 	outPath := fs.String("out", "", "output .epub path")
 	compliance := fs.String("compliance", "flexible", "flexible|ebpaj|kadokawa")
+	legacyTOC := fs.Bool("legacy-toc", false, "also generate EPUB 2 toc.ncx")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -353,7 +359,11 @@ func runRepack(args []string) error {
 	}
 	defer outFile.Close()
 
-	if err := epub.Encode(outFile, doc); err != nil {
+	encodeOpts := make([]epub.EncodeOption, 0, 1)
+	if *legacyTOC {
+		encodeOpts = append(encodeOpts, epub.WithLegacyTOC())
+	}
+	if err := epub.Encode(outFile, doc, encodeOpts...); err != nil {
 		return err
 	}
 
@@ -422,9 +432,9 @@ func printUsage() {
 
 Usage:
   epub inspect      -in book.epub [-compliance flexible|ebpaj|kadokawa]
-  epub repack       -in book.epub -out out.epub [-compliance flexible|ebpaj|kadokawa]
+	epub repack       -in book.epub -out out.epub [-compliance flexible|ebpaj|kadokawa] [-legacy-toc]
   epub images       -in book.epub [-mode pages|all] [-json] [-compliance flexible|ebpaj|kadokawa]
-	epub build-images -out out.epub [-title TITLE] [-compliance flexible|ebpaj|kadokawa] [-direction rtl|ltr] [-layout pre-paginated|reflowable]
+	epub build-images -out out.epub [-title TITLE] [-compliance flexible|ebpaj|kadokawa] [-legacy-toc] [-direction rtl|ltr] [-layout pre-paginated|reflowable]
 					[-spread left|right|center|none] [-glob './images/*.jpg'] [image1 image2 ...]
 `)
 }

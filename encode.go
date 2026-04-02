@@ -13,10 +13,28 @@ import (
 	"strings"
 )
 
+// EncodeOption mutates encode behavior.
+type EncodeOption func(*encodeConfig)
+
+type encodeConfig struct {
+	generateLegacyTOC bool
+}
+
+// WithLegacyTOC enables generation of EPUB 2 toc.ncx alongside EPUB 3 navigation.
+func WithLegacyTOC() EncodeOption {
+	return func(cfg *encodeConfig) {
+		cfg.generateLegacyTOC = true
+	}
+}
+
 // Encode writes a normalized Document into EPUB ZIP stream.
-func Encode(w io.Writer, doc *Document) error {
+func Encode(w io.Writer, doc *Document, opts ...EncodeOption) error {
 	if doc == nil {
 		return fmt.Errorf("document is nil")
+	}
+	cfg := encodeConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
 	}
 	zw := zip.NewWriter(w)
 
@@ -26,7 +44,7 @@ func Encode(w io.Writer, doc *Document) error {
 	if err := writeContainer(zw); err != nil {
 		return err
 	}
-	if err := writePackageAndAssets(zw, doc); err != nil {
+	if err := writePackageAndAssets(zw, doc, cfg); err != nil {
 		return err
 	}
 	return zw.Close()
@@ -57,12 +75,15 @@ func writeContainer(zw *zip.Writer) error {
 	return err
 }
 
-func writePackageAndAssets(zw *zip.Writer, doc *Document) error {
+func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) error {
 	assetPaths := make([]string, 0, len(doc.Assets))
 	for p := range doc.Assets {
 		assetPaths = append(assetPaths, p)
 	}
 	sort.Strings(assetPaths)
+
+	identifier := normalizeIdentifier(doc.Identifier)
+	navHref := "nav.xhtml"
 
 	manifestItems := make([]string, 0, len(assetPaths))
 	opfDir := "item"
@@ -73,6 +94,10 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document) error {
 			href = filepath.ToSlash(rel)
 		}
 		manifestItems = append(manifestItems, fmt.Sprintf(`<item id=%q href=%q media-type=%q/>`, xmlEscape(a.ID), xmlEscape(href), xmlEscape(a.MimeType)))
+	}
+	manifestItems = append(manifestItems, fmt.Sprintf(`<item id="nav" href=%q media-type="application/xhtml+xml" properties="nav"/>`, xmlEscape(navHref)))
+	if cfg.generateLegacyTOC {
+		manifestItems = append(manifestItems, `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`)
 	}
 
 	spineItems := make([]string, 0, len(doc.Pages))
@@ -89,20 +114,25 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document) error {
 	if doc.Layout == LayoutPrePaginated {
 		rLayout = "pre-paginated"
 	}
+	spineTOC := ""
+	if cfg.generateLegacyTOC {
+		spineTOC = ` toc="ncx"`
+	}
 
 	opf := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="pub-id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:title>%s</dc:title>
+    <dc:identifier id="pub-id">%s</dc:identifier>
     <meta property="rendition:layout">%s</meta>
   </metadata>
   <manifest>
     %s
   </manifest>
-  <spine page-progression-direction=%q>
+  <spine page-progression-direction=%q%s>
     %s
   </spine>
-</package>`, xmlEscape(doc.Title), rLayout, strings.Join(manifestItems, "\n    "), xmlEscape(normalizeDirection(doc.Direction)), strings.Join(spineItems, "\n    "))
+</package>`, xmlEscape(doc.Title), xmlEscape(identifier), rLayout, strings.Join(manifestItems, "\n    "), xmlEscape(normalizeDirection(doc.Direction)), spineTOC, strings.Join(spineItems, "\n    "))
 
 	w, err := zw.Create("item/standard.opf")
 	if err != nil {
@@ -110,6 +140,29 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document) error {
 	}
 	if _, err := io.WriteString(w, opf); err != nil {
 		return err
+	}
+
+	nav, err := buildNavigationDocument(doc, navHref)
+	if err != nil {
+		return err
+	}
+	navW, err := zw.Create(filepath.ToSlash(filepath.Join(opfDir, navHref)))
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(navW, nav); err != nil {
+		return err
+	}
+
+	if cfg.generateLegacyTOC {
+		ncx := buildLegacyNCX(doc, identifier)
+		ncxW, err := zw.Create("item/toc.ncx")
+		if err != nil {
+			return err
+		}
+		if _, err := io.WriteString(ncxW, ncx); err != nil {
+			return err
+		}
 	}
 
 	for _, p := range assetPaths {
@@ -153,4 +206,97 @@ func xmlEscape(v string) string {
 	var b bytes.Buffer
 	xml.EscapeText(&b, []byte(v))
 	return b.String()
+}
+
+func normalizeIdentifier(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "urn:uuid:generated"
+	}
+	return v
+}
+
+func buildNavigationDocument(doc *Document, navHref string) (string, error) {
+	tocItems := make([]string, 0, len(doc.Pages))
+	for i, pg := range doc.Pages {
+		href := strings.TrimSpace(pg.Href)
+		if href == "" {
+			if a, err := doc.GetAssetByPage(pg); err == nil && a != nil {
+				for p, asset := range doc.Assets {
+					if asset == a {
+						href = p
+						break
+					}
+				}
+			}
+		}
+		href = xmlEscape(strings.TrimPrefix(cleanOPFRef("item", href), "item/"))
+		if href == "" {
+			href = "#"
+		}
+		tocItems = append(tocItems, fmt.Sprintf(`<li><a href=%q>Page %d</a></li>`, href, i+1))
+	}
+	if len(tocItems) == 0 {
+		tocItems = append(tocItems, `<li><a href="#">Start</a></li>`)
+	}
+
+	bodyHref := "#"
+	if len(doc.Pages) > 0 {
+		first := strings.TrimSpace(doc.Pages[0].Href)
+		if first != "" {
+			bodyHref = xmlEscape(strings.TrimPrefix(cleanOPFRef("item", first), "item/"))
+		}
+	}
+	if bodyHref == "" {
+		bodyHref = "#"
+	}
+
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+  <head>
+    <title>Navigation</title>
+  </head>
+  <body>
+    <nav epub:type="toc" id="toc">
+      <h1>Navigation</h1>
+      <ol>
+        %s
+      </ol>
+    </nav>
+    <nav epub:type="landmarks" id="landmarks">
+      <h2>Landmarks</h2>
+      <ol>
+        <li><a epub:type="cover" href=%q>Cover</a></li>
+        <li><a epub:type="toc" href=%q>Navigation</a></li>
+        <li><a epub:type="bodymatter" href=%q>Body</a></li>
+      </ol>
+    </nav>
+  </body>
+</html>`, strings.Join(tocItems, "\n        "), bodyHref, xmlEscape(navHref), bodyHref), nil
+}
+
+func buildLegacyNCX(doc *Document, identifier string) string {
+	navPoints := make([]string, 0, len(doc.Pages))
+	for i, pg := range doc.Pages {
+		href := strings.TrimSpace(pg.Href)
+		href = strings.TrimPrefix(cleanOPFRef("item", href), "item/")
+		if href == "" {
+			href = "#"
+		}
+		navPoints = append(navPoints, fmt.Sprintf(`<navPoint id="navPoint-%d" playOrder="%d"><navLabel><text>Page %d</text></navLabel><content src=%q/></navPoint>`, i+1, i+1, i+1, xmlEscape(href)))
+	}
+	if len(navPoints) == 0 {
+		navPoints = append(navPoints, `<navPoint id="navPoint-1" playOrder="1"><navLabel><text>Start</text></navLabel><content src="#"/></navPoint>`)
+	}
+
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content=%q/>
+  </head>
+  <docTitle><text>%s</text></docTitle>
+  <navMap>
+    %s
+  </navMap>
+</ncx>`, xmlEscape(identifier), xmlEscape(doc.Title), strings.Join(navPoints, "\n    "))
 }

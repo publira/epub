@@ -74,11 +74,12 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 	}
 
 	doc := &Document{
-		Title:     strings.TrimSpace(pkg.Metadata.Title),
-		Direction: normalizeDirection(pkg.Spine.PageProgressionDirection),
-		Layout:    parseLayoutType(pkg.Metadata.Meta),
-		Pages:     make([]*Page, 0, len(pkg.Spine.Itemrefs)),
-		Assets:    make(map[string]*Asset, len(pkg.Manifest.Items)),
+		Title:      strings.TrimSpace(pkg.Metadata.Title),
+		Identifier: strings.TrimSpace(pkg.Metadata.Identifier),
+		Direction:  normalizeDirection(pkg.Spine.PageProgressionDirection),
+		Layout:     parseLayoutType(pkg.Metadata.Meta),
+		Pages:      make([]*Page, 0, len(pkg.Spine.Itemrefs)),
+		Assets:     make(map[string]*Asset, len(pkg.Manifest.Items)),
 	}
 
 	for _, item := range pkg.Manifest.Items {
