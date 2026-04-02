@@ -320,7 +320,7 @@ func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
 		return &DecodeError{
 			Path: "zip",
 			Rule: "max-asset-count",
-			Err: &ErrMaxAssetCountExceeded{Limit: cfg.maxAssetCount, Actual: len(zr.File)},
+			Err:  &ErrMaxAssetCountExceeded{Limit: cfg.maxAssetCount, Actual: len(zr.File)},
 		}
 	}
 
@@ -331,7 +331,7 @@ func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
 			return &DecodeError{
 				Path: f.Name,
 				Rule: "max-individual-asset-size",
-				Err: &ErrMaxIndividualAssetSizeExceeded{Name: f.Name, Limit: cfg.maxIndividualAssetSize, Actual: size},
+				Err:  &ErrMaxIndividualAssetSizeExceeded{Name: f.Name, Limit: cfg.maxIndividualAssetSize, Actual: size},
 			}
 		}
 
@@ -340,7 +340,7 @@ func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
 			return &DecodeError{
 				Path: "zip",
 				Rule: "max-total-uncompressed-size",
-				Err: &ErrMaxTotalUncompressedSizeExceeded{Limit: cfg.maxTotalUncompressedSize, Actual: total},
+				Err:  &ErrMaxTotalUncompressedSizeExceeded{Limit: cfg.maxTotalUncompressedSize, Actual: total},
 			}
 		}
 	}

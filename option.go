@@ -16,7 +16,7 @@ const (
 
 // decodeConfig stores Decode options.
 type decodeConfig struct {
-	compliance                ComplianceLevel
+	compliance               ComplianceLevel
 	maxAssetCount            int
 	maxTotalUncompressedSize int64
 	maxIndividualAssetSize   int64
