@@ -91,6 +91,64 @@ func (e *ErrManifestPhysicalMissing) Is(target error) bool {
 	return ok
 }
 
+// ErrMaxAssetCountExceeded is returned when ZIP entry count exceeds configured limit.
+type ErrMaxAssetCountExceeded struct {
+	Limit  int
+	Actual int
+}
+
+func (e *ErrMaxAssetCountExceeded) Error() string {
+	if e == nil {
+		return "zip entry count exceeds configured limit"
+	}
+	return fmt.Sprintf("zip entry count exceeds configured limit: actual=%d limit=%d", e.Actual, e.Limit)
+}
+
+func (e *ErrMaxAssetCountExceeded) Is(target error) bool {
+	_, ok := target.(*ErrMaxAssetCountExceeded)
+	return ok
+}
+
+// ErrMaxTotalUncompressedSizeExceeded is returned when total ZIP uncompressed size exceeds configured limit.
+type ErrMaxTotalUncompressedSizeExceeded struct {
+	Limit  int64
+	Actual uint64
+}
+
+func (e *ErrMaxTotalUncompressedSizeExceeded) Error() string {
+	if e == nil {
+		return "total uncompressed size exceeds configured limit"
+	}
+	return fmt.Sprintf("total uncompressed size exceeds configured limit: actual=%d limit=%d", e.Actual, e.Limit)
+}
+
+func (e *ErrMaxTotalUncompressedSizeExceeded) Is(target error) bool {
+	_, ok := target.(*ErrMaxTotalUncompressedSizeExceeded)
+	return ok
+}
+
+// ErrMaxIndividualAssetSizeExceeded is returned when a ZIP entry uncompressed size exceeds configured limit.
+type ErrMaxIndividualAssetSizeExceeded struct {
+	Name   string
+	Limit  int64
+	Actual uint64
+}
+
+func (e *ErrMaxIndividualAssetSizeExceeded) Error() string {
+	if e == nil {
+		return "individual uncompressed size exceeds configured limit"
+	}
+	if e.Name == "" {
+		return fmt.Sprintf("individual uncompressed size exceeds configured limit: actual=%d limit=%d", e.Actual, e.Limit)
+	}
+	return fmt.Sprintf("individual uncompressed size exceeds configured limit for %q: actual=%d limit=%d", e.Name, e.Actual, e.Limit)
+}
+
+func (e *ErrMaxIndividualAssetSizeExceeded) Is(target error) bool {
+	_, ok := target.(*ErrMaxIndividualAssetSizeExceeded)
+	return ok
+}
+
 // DecodeError represents an error that occurred during the decoding of an EPUB file, including the path where the error occurred and the underlying error.
 type DecodeError struct {
 	Path string

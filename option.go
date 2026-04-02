@@ -16,7 +16,10 @@ const (
 
 // decodeConfig stores Decode options.
 type decodeConfig struct {
-	compliance ComplianceLevel
+	compliance                ComplianceLevel
+	maxAssetCount            int
+	maxTotalUncompressedSize int64
+	maxIndividualAssetSize   int64
 }
 
 // DecodeOption mutates decode behavior.
@@ -26,6 +29,30 @@ type DecodeOption func(*decodeConfig)
 func WithCompliance(level ComplianceLevel) DecodeOption {
 	return func(cfg *decodeConfig) {
 		cfg.compliance = level
+	}
+}
+
+// WithMaxAssetCount limits the number of ZIP entries accepted during Decode.
+// A value <= 0 disables this limit.
+func WithMaxAssetCount(max int) DecodeOption {
+	return func(cfg *decodeConfig) {
+		cfg.maxAssetCount = max
+	}
+}
+
+// WithMaxTotalUncompressedSize limits the sum of all ZIP entry uncompressed sizes accepted during Decode.
+// A value <= 0 disables this limit.
+func WithMaxTotalUncompressedSize(max int64) DecodeOption {
+	return func(cfg *decodeConfig) {
+		cfg.maxTotalUncompressedSize = max
+	}
+}
+
+// WithMaxIndividualAssetSize limits each ZIP entry uncompressed size accepted during Decode.
+// A value <= 0 disables this limit.
+func WithMaxIndividualAssetSize(max int64) DecodeOption {
+	return func(cfg *decodeConfig) {
+		cfg.maxIndividualAssetSize = max
 	}
 }
 

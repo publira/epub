@@ -163,6 +163,92 @@ func TestDecode_UnknownSpineIDRefStructuredError(t *testing.T) {
 	}
 }
 
+func TestDecode_WithMaxAssetCount_Exceeded(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)), WithMaxAssetCount(3))
+	if err == nil {
+		t.Fatal("expected max asset count error")
+	}
+
+	var de *DecodeError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected DecodeError, got: %T", err)
+	}
+	if de.Rule != "max-asset-count" {
+		t.Fatalf("unexpected rule: %s", de.Rule)
+	}
+
+	var exceeded *ErrMaxAssetCountExceeded
+	if !errors.As(err, &exceeded) {
+		t.Fatalf("expected ErrMaxAssetCountExceeded, got: %v", err)
+	}
+	if exceeded.Limit != 3 {
+		t.Fatalf("unexpected limit: %d", exceeded.Limit)
+	}
+}
+
+func TestDecode_WithMaxTotalUncompressedSize_Exceeded(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)), WithMaxTotalUncompressedSize(200))
+	if err == nil {
+		t.Fatal("expected max total uncompressed size error")
+	}
+
+	var de *DecodeError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected DecodeError, got: %T", err)
+	}
+	if de.Rule != "max-total-uncompressed-size" {
+		t.Fatalf("unexpected rule: %s", de.Rule)
+	}
+
+	var exceeded *ErrMaxTotalUncompressedSizeExceeded
+	if !errors.As(err, &exceeded) {
+		t.Fatalf("expected ErrMaxTotalUncompressedSizeExceeded, got: %v", err)
+	}
+	if exceeded.Limit != 200 {
+		t.Fatalf("unexpected limit: %d", exceeded.Limit)
+	}
+}
+
+func TestDecode_WithMaxIndividualAssetSize_Exceeded(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)), WithMaxIndividualAssetSize(200))
+	if err == nil {
+		t.Fatal("expected max individual asset size error")
+	}
+
+	var de *DecodeError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected DecodeError, got: %T", err)
+	}
+	if de.Rule != "max-individual-asset-size" {
+		t.Fatalf("unexpected rule: %s", de.Rule)
+	}
+
+	var exceeded *ErrMaxIndividualAssetSizeExceeded
+	if !errors.As(err, &exceeded) {
+		t.Fatalf("expected ErrMaxIndividualAssetSizeExceeded, got: %v", err)
+	}
+	if exceeded.Limit != 200 {
+		t.Fatalf("unexpected limit: %d", exceeded.Limit)
+	}
+}
+
+func TestDecode_WithResourceLimits_AllowsWithinRange(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	_, err := Decode(
+		bytes.NewReader(epubData),
+		int64(len(epubData)),
+		WithMaxAssetCount(10),
+		WithMaxTotalUncompressedSize(10_000),
+		WithMaxIndividualAssetSize(5_000),
+	)
+	if err != nil {
+		t.Fatalf("Decode failed within configured limits: %v", err)
+	}
+}
+
 func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 	t.Helper()
 	if cfg.imageHref == "" {

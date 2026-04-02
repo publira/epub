@@ -29,6 +29,9 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 	if err != nil {
 		return nil, &DecodeError{Path: "zip", Rule: "zip-open", Err: err}
 	}
+	if err := validateResourceLimits(zr, cfg); err != nil {
+		return nil, err
+	}
 
 	if err := validateMimeType(zr); err != nil {
 		return nil, err
@@ -310,4 +313,37 @@ func wrapPathErr(path string, rule string, err error) error {
 		return err
 	}
 	return &DecodeError{Path: path, Rule: rule, Err: fmt.Errorf("%w", err)}
+}
+
+func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
+	if cfg.maxAssetCount > 0 && len(zr.File) > cfg.maxAssetCount {
+		return &DecodeError{
+			Path: "zip",
+			Rule: "max-asset-count",
+			Err: &ErrMaxAssetCountExceeded{Limit: cfg.maxAssetCount, Actual: len(zr.File)},
+		}
+	}
+
+	var total uint64
+	for _, f := range zr.File {
+		size := f.UncompressedSize64
+		if cfg.maxIndividualAssetSize > 0 && size > uint64(cfg.maxIndividualAssetSize) {
+			return &DecodeError{
+				Path: f.Name,
+				Rule: "max-individual-asset-size",
+				Err: &ErrMaxIndividualAssetSizeExceeded{Name: f.Name, Limit: cfg.maxIndividualAssetSize, Actual: size},
+			}
+		}
+
+		total += size
+		if cfg.maxTotalUncompressedSize > 0 && total > uint64(cfg.maxTotalUncompressedSize) {
+			return &DecodeError{
+				Path: "zip",
+				Rule: "max-total-uncompressed-size",
+				Err: &ErrMaxTotalUncompressedSizeExceeded{Limit: cfg.maxTotalUncompressedSize, Actual: total},
+			}
+		}
+	}
+
+	return nil
 }
