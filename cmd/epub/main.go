@@ -77,7 +77,7 @@ func runInspect(args []string) error {
 		return err
 	}
 
-	fmt.Printf("Title: %s\n", doc.Title)
+	fmt.Printf("Title: %s\n", doc.Metadata.Title)
 	fmt.Printf("Direction: %s\n", doc.Direction)
 	fmt.Printf("Layout: %s\n", doc.Layout.String())
 	fmt.Printf("Pages: %d\n", len(doc.Pages))
@@ -268,7 +268,7 @@ func runBuildFromImages(args []string) error {
 	}
 
 	doc := &epub.Document{
-		Title:     strings.TrimSpace(*title),
+		Metadata:  epub.Metadata{Title: strings.TrimSpace(*title)},
 		Direction: directionNorm,
 		Layout:    layoutType,
 		Pages:     make([]*epub.Page, 0, len(imagePaths)),

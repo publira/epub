@@ -11,6 +11,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
+)
+
+const (
+	defaultEBPAJGuideVersion = "1.1.3"
+	defaultKADOKAWAVersion   = "1.0"
 )
 
 // EncodeOption mutates encode behavior.
@@ -76,13 +82,16 @@ func writeContainer(zw *zip.Writer) error {
 }
 
 func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) error {
+	metadata := doc.effectiveMetadata()
+
 	assetPaths := make([]string, 0, len(doc.Assets))
 	for p := range doc.Assets {
 		assetPaths = append(assetPaths, p)
 	}
 	sort.Strings(assetPaths)
 
-	identifier := normalizeIdentifier(doc.Identifier)
+	identifier := normalizeIdentifier(metadata.Identifier)
+	identifierID := normalizeIdentifierID(metadata.IdentifierID)
 	navHref := "nav.xhtml"
 
 	manifestItems := make([]string, 0, len(assetPaths))
@@ -119,12 +128,37 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		spineTOC = ` toc="ncx"`
 	}
 
+	metadataEntries := []string{
+		fmt.Sprintf(`<dc:title id="title">%s</dc:title>`, xmlEscape(metadata.Title)),
+		fmt.Sprintf(`<dc:identifier id=%q>%s</dc:identifier>`, xmlEscape(identifierID), xmlEscape(identifier)),
+	}
+
+	if v := strings.TrimSpace(metadata.TitleFileAs); v != "" {
+		metadataEntries = append(metadataEntries, fmt.Sprintf(`<meta property="file-as" refines="#title">%s</meta>`, xmlEscape(v)))
+	}
+	for i, creator := range metadata.Creators {
+		name := strings.TrimSpace(creator.Name)
+		if name == "" {
+			continue
+		}
+		creatorID := fmt.Sprintf("creator-%d", i+1)
+		metadataEntries = append(metadataEntries, fmt.Sprintf(`<dc:creator id=%q>%s</dc:creator>`, xmlEscape(creatorID), xmlEscape(name)))
+		if v := strings.TrimSpace(creator.FileAs); v != "" {
+			metadataEntries = append(metadataEntries, fmt.Sprintf(`<meta property="file-as" refines=%q>%s</meta>`, xmlEscape("#"+creatorID), xmlEscape(v)))
+		}
+	}
+
+	metadataEntries = append(metadataEntries,
+		fmt.Sprintf(`<meta property="rendition:layout">%s</meta>`, xmlEscape(rLayout)),
+		fmt.Sprintf(`<meta property="dcterms:modified">%s</meta>`, xmlEscape(formatW3CTime(time.Now()))),
+		fmt.Sprintf(`<meta property="ebpaj:guide-version">%s</meta>`, xmlEscape(normalizeSpecVersion(metadata.EBPAJGuideVersion, defaultEBPAJGuideVersion))),
+		fmt.Sprintf(`<meta property="kadokawa:version">%s</meta>`, xmlEscape(normalizeSpecVersion(metadata.KADOKAWAVersion, defaultKADOKAWAVersion))),
+	)
+
 	opf := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="pub-id">
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier=%q prefix="rendition: http://www.idpf.org/vocab/rendition/# dcterms: http://purl.org/dc/terms/ ebpaj: https://www.ebpaj.jp/ kadokawa: https://www.kadokawa.co.jp/">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>%s</dc:title>
-    <dc:identifier id="pub-id">%s</dc:identifier>
-    <meta property="rendition:layout">%s</meta>
+    %s
   </metadata>
   <manifest>
     %s
@@ -132,7 +166,7 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
   <spine page-progression-direction=%q%s>
     %s
   </spine>
-</package>`, xmlEscape(doc.Title), xmlEscape(identifier), rLayout, strings.Join(manifestItems, "\n    "), xmlEscape(normalizeDirection(doc.Direction)), spineTOC, strings.Join(spineItems, "\n    "))
+</package>`, xmlEscape(identifierID), strings.Join(metadataEntries, "\n    "), strings.Join(manifestItems, "\n    "), xmlEscape(normalizeDirection(doc.Direction)), spineTOC, strings.Join(spineItems, "\n    "))
 
 	w, err := zw.Create("item/standard.opf")
 	if err != nil {
@@ -216,6 +250,26 @@ func normalizeIdentifier(v string) string {
 	return v
 }
 
+func normalizeIdentifierID(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "pub-id"
+	}
+	return v
+}
+
+func normalizeSpecVersion(v, fallback string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return fallback
+	}
+	return v
+}
+
+func formatW3CTime(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05Z")
+}
+
 func buildNavigationDocument(doc *Document, navHref string) (string, error) {
 	tocItems := make([]string, 0, len(doc.Pages))
 	for i, pg := range doc.Pages {
@@ -276,6 +330,8 @@ func buildNavigationDocument(doc *Document, navHref string) (string, error) {
 }
 
 func buildLegacyNCX(doc *Document, identifier string) string {
+	metadata := doc.effectiveMetadata()
+
 	navPoints := make([]string, 0, len(doc.Pages))
 	for i, pg := range doc.Pages {
 		href := strings.TrimSpace(pg.Href)
@@ -298,5 +354,5 @@ func buildLegacyNCX(doc *Document, identifier string) string {
   <navMap>
     %s
   </navMap>
-</ncx>`, xmlEscape(identifier), xmlEscape(doc.Title), strings.Join(navPoints, "\n    "))
+</ncx>`, xmlEscape(identifier), xmlEscape(metadata.Title), strings.Join(navPoints, "\n    "))
 }

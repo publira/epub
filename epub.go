@@ -25,13 +25,47 @@ import (
 //
 // Assets uses the manifest href as the map key.
 type Document struct {
-	Title      string
+	Metadata Metadata
+	// Title is kept for backward compatibility. Prefer Metadata.Title for new code.
+	Title string
+	// Identifier is kept for backward compatibility. Prefer Metadata.Identifier for new code.
 	Identifier string
 	Direction  string // "rtl" (right-to-left) or "ltr".
 	Layout     LayoutType
 	Pages      []*Page
 	Assets     map[string]*Asset
 	Warnings   []string
+}
+
+// Metadata represents OPF metadata values used by this package.
+type Metadata struct {
+	Title             string
+	TitleFileAs       string
+	Identifier        string
+	IdentifierID      string
+	Creators          []Creator
+	EBPAJGuideVersion string
+	KADOKAWAVersion   string
+}
+
+// Creator represents a dc:creator entry with optional phonetic sort key.
+type Creator struct {
+	Name   string
+	FileAs string
+}
+
+func (d *Document) effectiveMetadata() Metadata {
+	if d == nil {
+		return Metadata{}
+	}
+	m := d.Metadata
+	if strings.TrimSpace(m.Title) == "" {
+		m.Title = d.Title
+	}
+	if strings.TrimSpace(m.Identifier) == "" {
+		m.Identifier = d.Identifier
+	}
+	return m
 }
 
 // LayoutType represents rendition:layout in OPF metadata.

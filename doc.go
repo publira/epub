@@ -30,7 +30,7 @@
 //	img, _ := os.Open("./p-001.jpg")
 //	defer img.Close()
 //	st, _ := img.Stat()
-//	doc := &epub.Document{Title: "Demo", Direction: "rtl", Layout: epub.LayoutPrePaginated}
+//	doc := &epub.Document{Metadata: epub.Metadata{Title: "Demo"}, Direction: "rtl", Layout: epub.LayoutPrePaginated}
 //	_, _, _ = doc.AddPageWithAsset(img, st.Size(), "right")
 //	_ = epub.Encode(io.Discard, doc)
 package epub

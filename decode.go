@@ -101,9 +101,27 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		return nil, err
 	}
 
+	title, titleID := primaryDCValue(pkg.Metadata.Titles)
+	identifier, identifierID := primaryIdentifier(pkg.Metadata.Identifiers, pkg.UniqueIdentifier)
+	fileAsByRefines := parseFileAsByRefines(pkg.Metadata.Meta)
+
+	titleFileAs := ""
+	if titleID != "" {
+		titleFileAs = fileAsByRefines["#"+titleID]
+	}
+
 	doc := &Document{
-		Title:      strings.TrimSpace(pkg.Metadata.Title),
-		Identifier: strings.TrimSpace(pkg.Metadata.Identifier),
+		Metadata: Metadata{
+			Title:             title,
+			TitleFileAs:       titleFileAs,
+			Identifier:        identifier,
+			IdentifierID:      identifierID,
+			Creators:          parseCreators(pkg.Metadata.Creators, fileAsByRefines),
+			EBPAJGuideVersion: parseMetaValueByProperty(pkg.Metadata.Meta, "ebpaj:guide-version"),
+			KADOKAWAVersion:   parseMetaValueByProperty(pkg.Metadata.Meta, "kadokawa:version"),
+		},
+		Title:      title,
+		Identifier: identifier,
 		Direction:  normalizeDirection(pkg.Spine.PageProgressionDirection),
 		Layout:     parseLayoutType(pkg.Metadata.Meta),
 		Pages:      make([]*Page, 0, len(pkg.Spine.Itemrefs)),
@@ -334,6 +352,91 @@ func parseLayoutType(meta []metadataMeta) LayoutType {
 		}
 	}
 	return LayoutUnknown
+}
+
+func parseMetaValueByProperty(meta []metadataMeta, property string) string {
+	for _, m := range meta {
+		if strings.EqualFold(strings.TrimSpace(m.Property), property) {
+			v := strings.TrimSpace(m.Value)
+			if v == "" {
+				v = strings.TrimSpace(m.Content)
+			}
+			return v
+		}
+	}
+	return ""
+}
+
+func parseFileAsByRefines(meta []metadataMeta) map[string]string {
+	result := make(map[string]string)
+	for _, m := range meta {
+		if !strings.EqualFold(strings.TrimSpace(m.Property), "file-as") {
+			continue
+		}
+		refines := strings.TrimSpace(m.Refines)
+		if refines == "" {
+			continue
+		}
+		v := strings.TrimSpace(m.Value)
+		if v == "" {
+			v = strings.TrimSpace(m.Content)
+		}
+		if v == "" {
+			continue
+		}
+		result[refines] = v
+	}
+	return result
+}
+
+func parseCreators(creators []dcElement, fileAsByRefines map[string]string) []Creator {
+	result := make([]Creator, 0, len(creators))
+	for _, creator := range creators {
+		name := strings.TrimSpace(creator.Value)
+		if name == "" {
+			continue
+		}
+		ref := ""
+		if id := strings.TrimSpace(creator.ID); id != "" {
+			ref = "#" + id
+		}
+		result = append(result, Creator{Name: name, FileAs: fileAsByRefines[ref]})
+	}
+	return result
+}
+
+func primaryDCValue(values []dcElement) (string, string) {
+	for _, v := range values {
+		value := strings.TrimSpace(v.Value)
+		if value != "" {
+			return value, strings.TrimSpace(v.ID)
+		}
+	}
+	return "", ""
+}
+
+func primaryIdentifier(values []dcElement, preferredID string) (string, string) {
+	preferredID = strings.TrimSpace(preferredID)
+	if preferredID != "" {
+		for _, v := range values {
+			id := strings.TrimSpace(v.ID)
+			if id != preferredID {
+				continue
+			}
+			value := strings.TrimSpace(v.Value)
+			if value != "" {
+				return value, id
+			}
+		}
+	}
+
+	for _, v := range values {
+		value := strings.TrimSpace(v.Value)
+		if value != "" {
+			return value, strings.TrimSpace(v.ID)
+		}
+	}
+	return "", preferredID
 }
 
 func normalizeDirection(v string) string {

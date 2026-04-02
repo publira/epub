@@ -28,7 +28,7 @@ func ExampleDocument_AddAsset() {
 
 func ExampleDocument_AddPageWithAsset() {
 	doc := &Document{
-		Title:     "Demo",
+		Metadata:  Metadata{Title: "Demo"},
 		Direction: "rtl",
 		Layout:    LayoutPrePaginated,
 	}

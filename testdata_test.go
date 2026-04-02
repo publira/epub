@@ -44,7 +44,7 @@ func TestTestdata_DecodeAll(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Decode failed: %v", err)
 			}
-			if doc.Title == "" {
+			if doc.Metadata.Title == "" {
 				t.Error("Title is empty")
 			}
 			if len(doc.Pages) == 0 {
@@ -117,7 +117,7 @@ func TestTestdata_DPFJTemplates(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Decode failed: %v", err)
 			}
-			if doc.Title == "" {
+			if doc.Metadata.Title == "" {
 				t.Error("Title is empty")
 			}
 			if doc.Direction != "rtl" {

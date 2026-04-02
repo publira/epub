@@ -16,8 +16,11 @@ func TestDecode_MinimalValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
+	if doc.Metadata.Title != "Test Book" {
+		t.Fatalf("unexpected title: %s", doc.Metadata.Title)
+	}
 	if doc.Title != "Test Book" {
-		t.Fatalf("unexpected title: %s", doc.Title)
+		t.Fatalf("unexpected legacy title: %s", doc.Title)
 	}
 	if doc.Direction != "rtl" {
 		t.Fatalf("unexpected direction: %s", doc.Direction)
@@ -127,6 +130,94 @@ func TestDecode_WarningsCollected(t *testing.T) {
 	}
 	if !containsWarning(doc.Warnings, "archive file \"item/image/orphan.jpg\" is not declared in manifest") {
 		t.Fatalf("expected orphan file warning, got: %#v", doc.Warnings)
+	}
+}
+
+func TestDecode_Issue4AdvancedMetadata(t *testing.T) {
+	opf := `<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bw-ecode" prefix="rendition: http://www.idpf.org/vocab/rendition/# dcterms: http://purl.org/dc/terms/ ebpaj: https://www.ebpaj.jp/ kadokawa: https://www.kadokawa.co.jp/">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title id="title">Main Title</dc:title>
+    <dc:identifier id="bw-ecode">12345678901234567890</dc:identifier>
+    <dc:creator id="creator-1">Author A</dc:creator>
+    <meta property="file-as" refines="#title">Main Title Yomi</meta>
+    <meta property="file-as" refines="#creator-1">Author A Yomi</meta>
+    <meta property="rendition:layout">pre-paginated</meta>
+    <meta property="dcterms:modified">2026-04-02T12:34:56Z</meta>
+    <meta property="ebpaj:guide-version">1.2.0</meta>
+    <meta property="kadokawa:version">2.0</meta>
+  </metadata>
+  <manifest>
+    <item id="xhtml-1" href="xhtml/p-001.xhtml" media-type="application/xhtml+xml"/>
+    <item id="p-001" href="image/p-001.jpg" media-type="image/jpeg"/>
+  </manifest>
+  <spine page-progression-direction="rtl">
+    <itemref idref="xhtml-1" properties="page-spread-right"/>
+  </spine>
+</package>`
+
+	container := `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="item/standard.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`
+	xhtml := `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>p1</title><meta name="viewport" content="width=1200,height=1600"/></head><body><p>hello</p></body></html>`
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	write := func(name string, method uint16, body string) {
+		t.Helper()
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: method})
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	write("mimetype", zip.Store, "application/epub+zip")
+	write("META-INF/container.xml", zip.Deflate, container)
+	write("item/standard.opf", zip.Deflate, opf)
+	write("item/xhtml/p-001.xhtml", zip.Deflate, xhtml)
+	write("item/image/p-001.jpg", zip.Deflate, "fake-jpeg")
+
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	doc, err := Decode(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if doc.Metadata.IdentifierID != "bw-ecode" {
+		t.Fatalf("unexpected metadata identifier id: %s", doc.Metadata.IdentifierID)
+	}
+	if doc.Metadata.Identifier != "12345678901234567890" {
+		t.Fatalf("unexpected metadata identifier: %s", doc.Metadata.Identifier)
+	}
+	if doc.Identifier != "12345678901234567890" {
+		t.Fatalf("unexpected legacy identifier: %s", doc.Identifier)
+	}
+	if doc.Metadata.Title != "Main Title" {
+		t.Fatalf("unexpected metadata title: %s", doc.Metadata.Title)
+	}
+	if doc.Metadata.TitleFileAs != "Main Title Yomi" {
+		t.Fatalf("unexpected metadata title file-as: %s", doc.Metadata.TitleFileAs)
+	}
+	if len(doc.Metadata.Creators) != 1 {
+		t.Fatalf("unexpected metadata creators len: %d", len(doc.Metadata.Creators))
+	}
+	if doc.Metadata.Creators[0].Name != "Author A" || doc.Metadata.Creators[0].FileAs != "Author A Yomi" {
+		t.Fatalf("unexpected metadata creator: %#v", doc.Metadata.Creators[0])
+	}
+	if doc.Metadata.EBPAJGuideVersion != "1.2.0" {
+		t.Fatalf("unexpected metadata ebpaj guide version: %s", doc.Metadata.EBPAJGuideVersion)
+	}
+	if doc.Metadata.KADOKAWAVersion != "2.0" {
+		t.Fatalf("unexpected metadata kadokawa version: %s", doc.Metadata.KADOKAWAVersion)
 	}
 }
 

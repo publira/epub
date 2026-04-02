@@ -6,13 +6,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"regexp"
 	"strings"
 	"testing"
 )
 
 func TestEncode_MimetypeFirstStored(t *testing.T) {
 	doc := &Document{
-		Title:     "Demo",
+		Metadata:  Metadata{Title: "Demo"},
 		Direction: "rtl",
 		Layout:    LayoutPrePaginated,
 		Pages: []*Page{{
@@ -53,7 +54,7 @@ func TestEncode_MimetypeFirstStored(t *testing.T) {
 
 func TestEncodeDecode_RoundTripBasic(t *testing.T) {
 	doc := &Document{
-		Title:     "RoundTrip",
+		Metadata:  Metadata{Title: "RoundTrip"},
 		Direction: "ltr",
 		Layout:    LayoutPrePaginated,
 	}
@@ -75,8 +76,8 @@ func TestEncodeDecode_RoundTripBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
-	if decoded.Title != "RoundTrip" {
-		t.Fatalf("unexpected title: %s", decoded.Title)
+	if decoded.Metadata.Title != "RoundTrip" {
+		t.Fatalf("unexpected title: %s", decoded.Metadata.Title)
 	}
 	if decoded.Layout != LayoutPrePaginated {
 		t.Fatalf("unexpected layout: %v", decoded.Layout)
@@ -91,10 +92,9 @@ func TestEncodeDecode_RoundTripBasic(t *testing.T) {
 
 func TestEncode_GeneratesNavigationDocument(t *testing.T) {
 	doc := &Document{
-		Title:      "Nav Test",
-		Identifier: "E-0001",
-		Direction:  "rtl",
-		Layout:     LayoutPrePaginated,
+		Metadata:  Metadata{Title: "Nav Test", Identifier: "E-0001"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
 	}
 	png := testPNGBytes()
 	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
@@ -125,10 +125,9 @@ func TestEncode_GeneratesNavigationDocument(t *testing.T) {
 
 func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
 	doc := &Document{
-		Title:      "Legacy TOC",
-		Identifier: "E-2026-0002",
-		Direction:  "ltr",
-		Layout:     LayoutReflowable,
+		Metadata:  Metadata{Title: "Legacy TOC", Identifier: "E-2026-0002"},
+		Direction: "ltr",
+		Layout:    LayoutReflowable,
 	}
 	png := testPNGBytes()
 	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "none"); err != nil {
@@ -157,6 +156,57 @@ func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
 	ncxContent := readZipEntry(t, out.Bytes(), "item/toc.ncx")
 	if !strings.Contains(ncxContent, `<meta name="dtb:uid" content="E-2026-0002"/>`) {
 		t.Fatalf("ncx dtb:uid mismatch: %s", ncxContent)
+	}
+}
+
+func TestEncode_Issue4AdvancedMetadata(t *testing.T) {
+	doc := &Document{
+		Metadata: Metadata{
+			Title:             "Main Title",
+			TitleFileAs:       "Main Title Yomi",
+			IdentifierID:      "bw-ecode",
+			Identifier:        "12345678901234567890",
+			Creators:          []Creator{{Name: "Author A", FileAs: "Author A Yomi"}},
+			EBPAJGuideVersion: "1.2.0",
+			KADOKAWAVersion:   "2.0",
+		},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opfContent, `<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bw-ecode"`) {
+		t.Fatalf("opf unique-identifier is missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<dc:identifier id="bw-ecode">12345678901234567890</dc:identifier>`) {
+		t.Fatalf("opf bw-ecode identifier is missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta property="file-as" refines="#title">Main Title Yomi</meta>`) {
+		t.Fatalf("title file-as is missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<dc:creator id="creator-1">Author A</dc:creator>`) {
+		t.Fatalf("creator is missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta property="file-as" refines="#creator-1">Author A Yomi</meta>`) {
+		t.Fatalf("creator file-as is missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta property="ebpaj:guide-version">1.2.0</meta>`) {
+		t.Fatalf("ebpaj:guide-version is missing: %s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta property="kadokawa:version">2.0</meta>`) {
+		t.Fatalf("kadokawa:version is missing: %s", opfContent)
+	}
+	if !regexp.MustCompile(`<meta property="dcterms:modified">[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z</meta>`).MatchString(opfContent) {
+		t.Fatalf("dcterms:modified format is invalid: %s", opfContent)
 	}
 }
 

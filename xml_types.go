@@ -19,20 +19,28 @@ type containerRootfile struct {
 }
 
 type packageXML struct {
-	XMLName  xml.Name        `xml:"package"`
-	Metadata packageMetadata `xml:"metadata"`
-	Manifest packageManifest `xml:"manifest"`
-	Spine    packageSpine    `xml:"spine"`
+	XMLName          xml.Name        `xml:"package"`
+	UniqueIdentifier string          `xml:"unique-identifier,attr"`
+	Metadata         packageMetadata `xml:"metadata"`
+	Manifest         packageManifest `xml:"manifest"`
+	Spine            packageSpine    `xml:"spine"`
 }
 
 type packageMetadata struct {
-	Title      string         `xml:"title"`
-	Identifier string         `xml:"identifier"`
-	Meta       []metadataMeta `xml:"meta"`
+	Titles      []dcElement    `xml:"title"`
+	Identifiers []dcElement    `xml:"identifier"`
+	Creators    []dcElement    `xml:"creator"`
+	Meta        []metadataMeta `xml:"meta"`
+}
+
+type dcElement struct {
+	ID    string `xml:"id,attr"`
+	Value string `xml:",chardata"`
 }
 
 type metadataMeta struct {
 	Property string `xml:"property,attr"`
+	Refines  string `xml:"refines,attr"`
 	Name     string `xml:"name,attr"`
 	Content  string `xml:"content,attr"`
 	Value    string `xml:",chardata"`
