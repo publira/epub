@@ -84,7 +84,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 	for _, item := range pkg.Manifest.Items {
 		zfile, ok := filesByName[item.Href]
 		if !ok {
-			return nil, &DecodeError{Path: item.Href, Rule: "manifest-physical-existence", Err: ErrAssetNotFound}
+			return nil, &DecodeError{Path: item.Href, Rule: "manifest-physical-existence", Err: &ErrManifestPhysicalMissing{Href: item.Href}}
 		}
 		current := zfile
 		asset := &Asset{
@@ -104,7 +104,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 	for i, ref := range pkg.Spine.Itemrefs {
 		item, ok := manifestByID[ref.IDRef]
 		if !ok {
-			return nil, &DecodeError{Path: opfPath, Rule: "spine-idref", Err: ErrAssetNotFound}
+			return nil, &DecodeError{Path: opfPath, Rule: "spine-idref", Err: &ErrSpineUnknownIDRef{IDRef: ref.IDRef}}
 		}
 		page := &Page{Order: i, AssetID: item.ID, Href: item.Href, Spread: spreadFromProperties(ref.Properties)}
 		if doc.IsPrePaginated() && strings.Contains(item.MediaType, "xhtml") {
@@ -190,7 +190,7 @@ func readPackageXML(files map[string]*zip.File, opfPath string) (*packageXML, er
 func readViewport(files map[string]*zip.File, href string) (int, int, error) {
 	f, ok := files[href]
 	if !ok {
-		return 0, 0, &DecodeError{Path: href, Rule: "viewport-file", Err: ErrAssetNotFound}
+		return 0, 0, &DecodeError{Path: href, Rule: "viewport-file", Err: &ErrManifestPhysicalMissing{Href: href}}
 	}
 	rc, err := f.Open()
 	if err != nil {

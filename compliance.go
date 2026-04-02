@@ -20,7 +20,7 @@ func validateCompliance(level ComplianceLevel, files map[string]struct{}, manife
 
 	for href, item := range manifest {
 		if _, ok := files[href]; !ok {
-			return &DecodeError{Path: href, Rule: "manifest-physical-existence", Err: ErrAssetNotFound}
+			return &DecodeError{Path: href, Rule: "manifest-physical-existence", Err: &ErrManifestPhysicalMissing{Href: href}}
 		}
 		if err := validateDirectoryRule(href); err != nil {
 			return err

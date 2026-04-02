@@ -115,12 +115,61 @@ type minimalEPUBConfig struct {
 	withViewport     bool
 	imageHref        string
 	embeddedImageSrc string
+	spineIDRef       string
+	omitImageFile    bool
+}
+
+func TestDecode_MissingManifestPhysicalFileStructuredError(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true, omitImageFile: true})
+	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)))
+	if err == nil {
+		t.Fatal("expected manifest-physical-existence error")
+	}
+	var de *DecodeError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected DecodeError, got: %T", err)
+	}
+	if de.Rule != "manifest-physical-existence" {
+		t.Fatalf("unexpected rule: %s", de.Rule)
+	}
+	var missing *ErrManifestPhysicalMissing
+	if !errors.As(err, &missing) {
+		t.Fatalf("expected ErrManifestPhysicalMissing, got: %v", err)
+	}
+	if missing.Href != "item/image/p-001.jpg" {
+		t.Fatalf("unexpected missing href: %s", missing.Href)
+	}
+}
+
+func TestDecode_UnknownSpineIDRefStructuredError(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true, spineIDRef: "missing-item"})
+	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)))
+	if err == nil {
+		t.Fatal("expected spine-idref error")
+	}
+	var de *DecodeError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected DecodeError, got: %T", err)
+	}
+	if de.Rule != "spine-idref" {
+		t.Fatalf("unexpected rule: %s", de.Rule)
+	}
+	var unknown *ErrSpineUnknownIDRef
+	if !errors.As(err, &unknown) {
+		t.Fatalf("expected ErrSpineUnknownIDRef, got: %v", err)
+	}
+	if unknown.IDRef != "missing-item" {
+		t.Fatalf("unexpected missing idref: %s", unknown.IDRef)
+	}
 }
 
 func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 	t.Helper()
 	if cfg.imageHref == "" {
 		cfg.imageHref = "item/image/p-001.jpg"
+	}
+	if cfg.spineIDRef == "" {
+		cfg.spineIDRef = "xhtml-1"
 	}
 	manifestImageHref := strings.TrimPrefix(cfg.imageHref, "item/")
 	if !cfg.mimetypeFirst && cfg.mimetypeDeflate {
@@ -161,7 +210,7 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 		<item id="p-001" href="` + manifestImageHref + `" media-type="image/jpeg"/>
   </manifest>
   <spine page-progression-direction="rtl">
-    <itemref idref="xhtml-1" properties="page-spread-right"/>
+	    <itemref idref="` + cfg.spineIDRef + `" properties="page-spread-right"/>
   </spine>
 </package>`
 
@@ -220,10 +269,12 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 	} else if _, err := w.Write([]byte(xhtml)); err != nil {
 		t.Fatalf("write xhtml: %v", err)
 	}
-	if w, err := zw.Create(cfg.imageHref); err != nil {
-		t.Fatalf("create image: %v", err)
-	} else if _, err := w.Write([]byte("fake-jpeg")); err != nil {
-		t.Fatalf("write image: %v", err)
+	if !cfg.omitImageFile {
+		if w, err := zw.Create(cfg.imageHref); err != nil {
+			t.Fatalf("create image: %v", err)
+		} else if _, err := w.Write([]byte("fake-jpeg")); err != nil {
+			t.Fatalf("write image: %v", err)
+		}
 	}
 
 	if err := zw.Close(); err != nil {

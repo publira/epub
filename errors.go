@@ -22,8 +22,8 @@ var (
 	ErrSpineMissing = errors.New("OPF spine is missing")
 	// ErrInvalidViewport is returned when viewport meta cannot be parsed.
 	ErrInvalidViewport = errors.New("invalid viewport meta")
-	// ErrAssetNotFound is returned when an itemref references unknown manifest item.
-	ErrAssetNotFound = errors.New("spine itemref references unknown manifest item")
+	// ErrAssetNotFound is returned when an asset cannot be resolved from the current document.
+	ErrAssetNotFound = errors.New("asset not found")
 	// ErrNilAsset is returned when asset receiver is nil.
 	ErrNilAsset = errors.New("asset is nil")
 	// ErrNilAssetOpen is returned when asset stream function is nil.
@@ -56,6 +56,40 @@ var (
 	errInvalidImageNaming     = errors.New("image path must follow item/image/p-000.(jpg|png) format")
 	errInvalidDirectoryLayout = errors.New("asset path must be under item/xhtml, item/image, or item/style")
 )
+
+// ErrSpineUnknownIDRef is returned when a spine itemref points to an unknown manifest ID.
+type ErrSpineUnknownIDRef struct {
+	IDRef string
+}
+
+func (e *ErrSpineUnknownIDRef) Error() string {
+	if e == nil || e.IDRef == "" {
+		return "spine itemref references unknown manifest id"
+	}
+	return fmt.Sprintf("spine itemref references unknown manifest id %q", e.IDRef)
+}
+
+func (e *ErrSpineUnknownIDRef) Is(target error) bool {
+	_, ok := target.(*ErrSpineUnknownIDRef)
+	return ok
+}
+
+// ErrManifestPhysicalMissing is returned when a manifest item href does not exist in the ZIP.
+type ErrManifestPhysicalMissing struct {
+	Href string
+}
+
+func (e *ErrManifestPhysicalMissing) Error() string {
+	if e == nil || e.Href == "" {
+		return "manifest item href does not exist in ZIP"
+	}
+	return fmt.Sprintf("manifest item href %q does not exist in ZIP", e.Href)
+}
+
+func (e *ErrManifestPhysicalMissing) Is(target error) bool {
+	_, ok := target.(*ErrManifestPhysicalMissing)
+	return ok
+}
 
 // DecodeError represents an error that occurred during the decoding of an EPUB file, including the path where the error occurred and the underlying error.
 type DecodeError struct {
