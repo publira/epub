@@ -42,10 +42,14 @@ func ExampleDocument_AddPageWithAsset() {
 	}
 
 	fmt.Println(page.Order)
-	fmt.Println(page.AssetID == asset.ID)
+	fmt.Println(strings.HasPrefix(page.AssetID, "xhtml-"))
+	fmt.Println(page.Href)
+	fmt.Println(asset.MimeType)
 	fmt.Println(len(doc.Pages), len(doc.Assets))
 	// Output:
 	// 0
 	// true
-	// 1 1
+	// item/xhtml/p-001.xhtml
+	// image/png
+	// 1 2
 }

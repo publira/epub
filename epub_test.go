@@ -47,7 +47,7 @@ func TestAddPageAutoDerivation(t *testing.T) {
 	}
 }
 
-func TestAddPageWithAssetSharesID(t *testing.T) {
+func TestAddPageWithAssetGeneratesXHTMLWrapper(t *testing.T) {
 	doc := &Document{}
 	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Zk7kAAAAASUVORK5CYII=")
 	if err != nil {
@@ -59,10 +59,10 @@ func TestAddPageWithAssetSharesID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddPageWithAsset returned error: %v", err)
 	}
-	if page.AssetID != asset.ID {
-		t.Fatalf("page asset id (%s) and asset id (%s) must match", page.AssetID, asset.ID)
+	if page.AssetID == asset.ID {
+		t.Fatalf("page asset id (%s) must point to wrapper, not image (%s)", page.AssetID, asset.ID)
 	}
-	if page.Href != "item/image/p-001.png" {
+	if page.Href != "item/xhtml/p-001.xhtml" {
 		t.Fatalf("unexpected page href: %s", page.Href)
 	}
 	if page.Spread != "left" {
@@ -70,6 +70,33 @@ func TestAddPageWithAssetSharesID(t *testing.T) {
 	}
 	if page.Width != 1 || page.Height != 1 {
 		t.Fatalf("unexpected viewport: %dx%d", page.Width, page.Height)
+	}
+	if len(doc.Assets) != 2 {
+		t.Fatalf("unexpected assets len: %d", len(doc.Assets))
+	}
+
+	wrapper := doc.Assets[page.Href]
+	if wrapper == nil {
+		t.Fatalf("wrapper asset not found: %s", page.Href)
+	}
+	if wrapper.MimeType != "application/xhtml+xml" {
+		t.Fatalf("unexpected wrapper mime type: %s", wrapper.MimeType)
+	}
+	rc, err := wrapper.Open()
+	if err != nil {
+		t.Fatalf("open wrapper failed: %v", err)
+	}
+	defer rc.Close()
+	body, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read wrapper failed: %v", err)
+	}
+	xhtml := string(body)
+	if !strings.Contains(xhtml, `name="viewport" content="width=1, height=1"`) {
+		t.Fatalf("viewport meta is missing: %s", xhtml)
+	}
+	if !strings.Contains(xhtml, `img src="../image/p-001.png"`) {
+		t.Fatalf("image ref is missing: %s", xhtml)
 	}
 }
 
@@ -95,7 +122,7 @@ func TestDocumentExtractReferencedImagesFromSpineDirectImage(t *testing.T) {
 	if refs[0].Asset != asset {
 		t.Fatal("expected asset pointer to be preserved")
 	}
-	if refs[0].Href != page.Href {
+	if refs[0].Href != "item/image/p-001.png" {
 		t.Fatalf("unexpected href: %s", refs[0].Href)
 	}
 }
@@ -126,8 +153,11 @@ func TestDocumentGetAssetByPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAssetByPage returned error: %v", err)
 	}
-	if resolved != asset {
-		t.Fatal("resolved asset pointer should match returned asset")
+	if resolved == asset {
+		t.Fatal("resolved page asset should be wrapper, not returned image asset")
+	}
+	if resolved == nil || resolved.MimeType != "application/xhtml+xml" {
+		t.Fatalf("unexpected resolved page asset: %#v", resolved)
 	}
 }
 

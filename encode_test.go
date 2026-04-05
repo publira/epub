@@ -63,8 +63,8 @@ func TestEncodeDecode_RoundTripBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddPageWithAsset failed: %v", err)
 	}
-	if page.AssetID != asset.ID {
-		t.Fatalf("page asset mismatch: %s vs %s", page.AssetID, asset.ID)
+	if page.AssetID == asset.ID {
+		t.Fatalf("page asset should point to wrapper, got image id: %s", page.AssetID)
 	}
 
 	var out bytes.Buffer
@@ -85,7 +85,7 @@ func TestEncodeDecode_RoundTripBasic(t *testing.T) {
 	if len(decoded.Pages) != 1 {
 		t.Fatalf("unexpected pages len: %d", len(decoded.Pages))
 	}
-	if len(decoded.Assets) != 2 {
+	if len(decoded.Assets) != 3 {
 		t.Fatalf("unexpected assets len: %d", len(decoded.Assets))
 	}
 }

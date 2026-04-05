@@ -66,3 +66,33 @@ type spineItem struct {
 	IDRef      string `xml:"idref,attr"`
 	Properties string `xml:"properties,attr"`
 }
+
+type xhtmlMeta struct {
+	XMLName xml.Name `xml:"meta"`
+	Name    string   `xml:"name,attr"`
+	Content string   `xml:"content,attr"`
+}
+
+type xhtmlImg struct {
+	XMLName xml.Name `xml:"img"`
+	Src     string   `xml:"src,attr"`
+	Alt     string   `xml:"alt,attr"`
+}
+
+type xhtmlHead struct {
+	Title string    `xml:"title"`
+	Meta  xhtmlMeta `xml:"meta"`
+	Style string    `xml:"style"`
+}
+
+type xhtmlBody struct {
+	Img xhtmlImg `xml:"img"`
+}
+
+type xhtmlDocument struct {
+	XMLName   xml.Name  `xml:"html"`
+	XMLNS     string    `xml:"xmlns,attr"`
+	XMLNSEpub string    `xml:"xmlns:epub,attr"`
+	Head      xhtmlHead `xml:"head"`
+	Body      xhtmlBody `xml:"body"`
+}

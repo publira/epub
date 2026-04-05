@@ -3,6 +3,7 @@
 package epub
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/xml"
@@ -227,7 +228,9 @@ func (d *Document) AddAsset(mimeType string, r io.ReaderAt, size int64) (string,
 // AddPageWithAsset registers an asset and appends its page in one call.
 //
 // mime type and viewport width/height are derived from r.
-// If page creation fails after asset registration, the asset is rolled back.
+// The spine is linked to a generated XHTML wrapper to keep fixed-layout rendering
+// behavior consistent across readers (including Apple Books).
+// If page creation fails after asset registration, created assets are rolled back.
 func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*Page, *Asset, error) {
 	mimeType, width, height, err := detectAssetMeta(r, size)
 	if err != nil {
@@ -239,15 +242,86 @@ func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*
 		return nil, nil, err
 	}
 
-	page, err := d.AddPage(width, height, spread)
+	xhtmlHref, xhtmlAsset, err := d.addXHTMLPageAsset(assetHref, asset.ID, width, height)
 	if err != nil {
 		delete(d.Assets, assetHref)
 		return nil, nil, err
 	}
-	page.AssetID = asset.ID
-	page.Href = assetHref
+
+	page, err := d.AddPage(width, height, spread)
+	if err != nil {
+		delete(d.Assets, xhtmlHref)
+		delete(d.Assets, assetHref)
+		return nil, nil, err
+	}
+	page.AssetID = xhtmlAsset.ID
+	page.Href = xhtmlHref
 
 	return page, asset, nil
+}
+
+func (d *Document) addXHTMLPageAsset(imageHref, imageID string, width, height int) (string, *Asset, error) {
+	if d == nil {
+		return "", nil, ErrNilDocument
+	}
+	xhtmlID := "xhtml-" + imageID
+	xhtmlHref := path.Join("item/xhtml", imageID+".xhtml")
+	if d.Assets == nil {
+		d.Assets = make(map[string]*Asset)
+	}
+	if _, exists := d.Assets[xhtmlHref]; exists {
+		return "", nil, ErrDuplicateAssetPath
+	}
+	for _, a := range d.Assets {
+		if a != nil && a.ID == xhtmlID {
+			return "", nil, ErrDuplicateAssetID
+		}
+	}
+
+	imgSrc := path.Clean(path.Join("..", path.Base(path.Dir(imageHref)), path.Base(imageHref)))
+	body, err := buildXHTMLPageWrapper(width, height, imgSrc)
+	if err != nil {
+		return "", nil, err
+	}
+	asset := &Asset{
+		ID:       xhtmlID,
+		MimeType: "application/xhtml+xml",
+		Size:     uint64(len(body)),
+		Open: func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(body)), nil
+		},
+	}
+	if err := asset.CalculateHash(); err != nil {
+		return "", nil, err
+	}
+
+	d.Assets[xhtmlHref] = asset
+	return xhtmlHref, asset, nil
+}
+
+func buildXHTMLPageWrapper(width, height int, imgSrc string) ([]byte, error) {
+	doc := xhtmlDocument{
+		XMLNS:     "http://www.w3.org/1999/xhtml",
+		XMLNSEpub: "http://www.idpf.org/2007/ops",
+		Head: xhtmlHead{
+			Title: "Page",
+			Meta: xhtmlMeta{
+				Name:    "viewport",
+				Content: fmt.Sprintf("width=%d, height=%d", width, height),
+			},
+			Style: "html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }\n" +
+				"img { display: block; width: 100%; height: 100%; object-fit: contain; }",
+		},
+		Body: xhtmlBody{
+			Img: xhtmlImg{Src: imgSrc, Alt: ""},
+		},
+	}
+
+	b, err := xml.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte(xml.Header), b...), nil
 }
 
 func detectAssetMeta(r io.ReaderAt, size int64) (mimeType string, width int, height int, err error) {
@@ -277,48 +351,6 @@ func detectAssetMeta(r io.ReaderAt, size int64) (mimeType string, width int, hei
 		return "", 0, 0, err
 	}
 	return mimeType, cfg.Width, cfg.Height, nil
-}
-
-func readerAtSize(r io.ReaderAt) (int64, error) {
-	if s, ok := r.(interface{ Size() int64 }); ok {
-		return s.Size(), nil
-	}
-	if l, ok := r.(interface{ Len() int }); ok {
-		return int64(l.Len()), nil
-	}
-
-	one := make([]byte, 1)
-	var hi int64 = 1
-	for {
-		_, err := r.ReadAt(one, hi-1)
-		if err == nil {
-			if hi > (1 << 62) {
-				return 0, ErrCannotInferAssetSize
-			}
-			hi *= 2
-			continue
-		}
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		return 0, err
-	}
-
-	lo := hi / 2
-	for lo+1 < hi {
-		mid := lo + (hi-lo)/2
-		_, err := r.ReadAt(one, mid-1)
-		if err == nil {
-			lo = mid
-			continue
-		}
-		if errors.Is(err, io.EOF) {
-			hi = mid
-			continue
-		}
-		return 0, err
-	}
-	return lo, nil
 }
 
 func (d *Document) nextAssetID() string {
