@@ -4,7 +4,6 @@ package epub
 
 import (
 	"archive/zip"
-	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -103,13 +102,18 @@ func writeContainer(zw *zip.Writer) error {
 	if err != nil {
 		return err
 	}
-	container := `<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-  <rootfiles>
-    <rootfile full-path="item/standard.opf" media-type="application/oebps-package+xml"/>
-  </rootfiles>
-</container>`
-	_, err = io.WriteString(w, container)
+	c := containerXML{
+		Rootfiles: containerRootfiles{
+			Rootfile: []containerRootfile{
+				{FullPath: "item/standard.opf", MediaType: "application/oebps-package+xml"},
+			},
+		},
+	}
+	b, err := xml.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, xml.Header+string(b))
 	return err
 }
 
@@ -128,8 +132,8 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 
 	coverAssetID := resolveCoverAssetID(doc, assetPaths)
 
-	manifestItems := make([]string, 0, len(assetPaths))
 	opfDir := "item"
+	items := make([]manifestItem, 0, len(assetPaths)+2)
 	for _, p := range assetPaths {
 		a := doc.Assets[p]
 		href := p
@@ -140,51 +144,34 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		if coverAssetID != "" && a.ID == coverAssetID {
 			item.Properties = "cover-image"
 		}
-		b, err := xml.Marshal(item)
-		if err != nil {
-			return err
-		}
-		manifestItems = append(manifestItems, string(b))
+		items = append(items, item)
 	}
-	navItemBytes, err := xml.Marshal(manifestItem{ID: "nav", Href: navHref, MediaType: "application/xhtml+xml", Properties: "nav"})
-	if err != nil {
-		return err
-	}
-	manifestItems = append(manifestItems, string(navItemBytes))
+	items = append(items, manifestItem{ID: "nav", Href: navHref, MediaType: "application/xhtml+xml", Properties: "nav"})
 	if cfg.generateLegacyTOC {
-		ncxItemBytes, err := xml.Marshal(manifestItem{ID: "ncx", Href: "toc.ncx", MediaType: "application/x-dtbncx+xml"})
-		if err != nil {
-			return err
-		}
-		manifestItems = append(manifestItems, string(ncxItemBytes))
+		items = append(items, manifestItem{ID: "ncx", Href: "toc.ncx", MediaType: "application/x-dtbncx+xml"})
 	}
 
-	spineItems := make([]string, 0, len(doc.Pages))
+	spineItems := make([]spineItem, 0, len(doc.Pages))
 	for _, pg := range doc.Pages {
-		prop := spreadToProperty(pg.Spread)
-		if prop == "" {
-			spineItems = append(spineItems, fmt.Sprintf(`<itemref idref=%q/>`, xmlEscape(pg.AssetID)))
-			continue
-		}
-		spineItems = append(spineItems, fmt.Sprintf(`<itemref idref=%q properties=%q/>`, xmlEscape(pg.AssetID), xmlEscape(prop)))
+		spineItems = append(spineItems, spineItem{
+			IDRef:      pg.AssetID,
+			Properties: spreadToProperty(pg.Spread),
+		})
 	}
 
 	rLayout := "reflowable"
 	if doc.Layout == LayoutPrePaginated {
 		rLayout = "pre-paginated"
 	}
-	spineTOC := ""
-	if cfg.generateLegacyTOC {
-		spineTOC = ` toc="ncx"`
-	}
 
-	metadataEntries := []string{
-		fmt.Sprintf(`<dc:title id="title">%s</dc:title>`, xmlEscape(metadata.Title)),
-		fmt.Sprintf(`<dc:identifier id=%q>%s</dc:identifier>`, xmlEscape(identifierID), xmlEscape(identifier)),
-	}
+	titles := []dcElement{{ID: "title", Value: metadata.Title}}
+	identifiers := []dcElement{{ID: identifierID, Value: identifier}}
+
+	var creators []dcElement
+	var metaEntries []metadataMeta
 
 	if v := strings.TrimSpace(metadata.TitleFileAs); v != "" {
-		metadataEntries = append(metadataEntries, fmt.Sprintf(`<meta property="file-as" refines="#title">%s</meta>`, xmlEscape(v)))
+		metaEntries = append(metaEntries, metadataMeta{Property: "file-as", Refines: "#title", Value: v})
 	}
 	for i, creator := range metadata.Creators {
 		name := strings.TrimSpace(creator.Name)
@@ -192,50 +179,61 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 			continue
 		}
 		creatorID := fmt.Sprintf("creator-%d", i+1)
-		metadataEntries = append(metadataEntries, fmt.Sprintf(`<dc:creator id=%q>%s</dc:creator>`, xmlEscape(creatorID), xmlEscape(name)))
+		creators = append(creators, dcElement{ID: creatorID, Value: name})
 		if v := strings.TrimSpace(creator.FileAs); v != "" {
-			metadataEntries = append(metadataEntries, fmt.Sprintf(`<meta property="file-as" refines=%q>%s</meta>`, xmlEscape("#"+creatorID), xmlEscape(v)))
+			metaEntries = append(metaEntries, metadataMeta{Property: "file-as", Refines: "#" + creatorID, Value: v})
 		}
 	}
 
 	if coverAssetID != "" {
-		coverMetaBytes, err := xml.Marshal(metadataMeta{Name: "cover", Content: coverAssetID})
-		if err != nil {
-			return err
-		}
-		metadataEntries = append(metadataEntries, string(coverMetaBytes))
+		metaEntries = append(metaEntries, metadataMeta{Name: "cover", Content: coverAssetID})
 	}
 
 	rSpread := normalizeRenditionSpread(metadata.RenditionSpread)
 	rOrientation := normalizeRenditionOrientation(metadata.RenditionOrientation)
 
-	metadataEntries = append(metadataEntries,
-		fmt.Sprintf(`<meta property="rendition:layout">%s</meta>`, xmlEscape(rLayout)),
-		fmt.Sprintf(`<meta property="rendition:spread">%s</meta>`, xmlEscape(rSpread)),
-		fmt.Sprintf(`<meta property="rendition:orientation">%s</meta>`, xmlEscape(rOrientation)),
-		fmt.Sprintf(`<meta property="dcterms:modified">%s</meta>`, xmlEscape(formatW3CTime(time.Now()))),
-		fmt.Sprintf(`<meta property="ebpaj:guide-version">%s</meta>`, xmlEscape(normalizeSpecVersion(metadata.EBPAJGuideVersion, defaultEBPAJGuideVersion))),
-		fmt.Sprintf(`<meta property="kadokawa:version">%s</meta>`, xmlEscape(normalizeSpecVersion(metadata.KADOKAWAVersion, defaultKADOKAWAVersion))),
+	metaEntries = append(metaEntries,
+		metadataMeta{Property: "rendition:layout", Value: rLayout},
+		metadataMeta{Property: "rendition:spread", Value: rSpread},
+		metadataMeta{Property: "rendition:orientation", Value: rOrientation},
+		metadataMeta{Property: "dcterms:modified", Value: formatW3CTime(time.Now())},
+		metadataMeta{Property: "ebpaj:guide-version", Value: normalizeSpecVersion(metadata.EBPAJGuideVersion, defaultEBPAJGuideVersion)},
+		metadataMeta{Property: "kadokawa:version", Value: normalizeSpecVersion(metadata.KADOKAWAVersion, defaultKADOKAWAVersion)},
 	)
 
-	opf := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier=%q prefix="rendition: http://www.idpf.org/vocab/rendition/# dcterms: http://purl.org/dc/terms/ ebpaj: https://www.ebpaj.jp/ kadokawa: https://www.kadokawa.co.jp/">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    %s
-  </metadata>
-  <manifest>
-    %s
-  </manifest>
-  <spine page-progression-direction=%q%s>
-    %s
-  </spine>
-</package>`, xmlEscape(identifierID), strings.Join(metadataEntries, "\n    "), strings.Join(manifestItems, "\n    "), xmlEscape(normalizeDirection(doc.Direction)), spineTOC, strings.Join(spineItems, "\n    "))
+	spineTOC := ""
+	if cfg.generateLegacyTOC {
+		spineTOC = "ncx"
+	}
+
+	pkg := packageXML{
+		Version:          "3.0",
+		UniqueIdentifier: identifierID,
+		Prefix:           "rendition: http://www.idpf.org/vocab/rendition/# dcterms: http://purl.org/dc/terms/ ebpaj: https://www.ebpaj.jp/ kadokawa: https://www.kadokawa.co.jp/",
+		Metadata: packageMetadata{
+			Titles:      titles,
+			Identifiers: identifiers,
+			Creators:    creators,
+			Meta:        metaEntries,
+		},
+		Manifest: packageManifest{Items: items},
+		Spine: packageSpine{
+			PageProgressionDirection: normalizeDirection(doc.Direction),
+			TOC:                      spineTOC,
+			Itemrefs:                 spineItems,
+		},
+	}
+
+	b, err := xml.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		return err
+	}
 
 	w, err := zw.Create("item/standard.opf")
 	if err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, opf); err != nil {
+	if _, err := io.WriteString(w, xml.Header+string(b)); err != nil {
 		return err
 	}
 
@@ -252,7 +250,10 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 	}
 
 	if cfg.generateLegacyTOC {
-		ncx := buildLegacyNCX(doc, identifier)
+		ncx, err := buildLegacyNCX(doc, identifier)
+		if err != nil {
+			return err
+		}
 		ncxW, err := zw.Create("item/toc.ncx")
 		if err != nil {
 			return err
@@ -297,12 +298,6 @@ func spreadToProperty(spread string) string {
 	default:
 		return ""
 	}
-}
-
-func xmlEscape(v string) string {
-	var b bytes.Buffer
-	xml.EscapeText(&b, []byte(v))
-	return b.String()
 }
 
 func normalizeIdentifier(v string) string {
@@ -477,30 +472,43 @@ func buildNavigationDocument(doc *Document, navHref string, coverAssetID string)
 	return xml.Header + string(b), nil
 }
 
-func buildLegacyNCX(doc *Document, identifier string) string {
+func buildLegacyNCX(doc *Document, identifier string) (string, error) {
 	metadata := doc.effectiveMetadata()
 
-	navPoints := make([]string, 0, len(doc.Pages))
+	navPoints := make([]ncxNavPoint, 0, len(doc.Pages))
 	for i, pg := range doc.Pages {
 		href := strings.TrimSpace(pg.Href)
 		href = strings.TrimPrefix(cleanOPFRef("item", href), "item/")
 		if href == "" {
 			href = "#"
 		}
-		navPoints = append(navPoints, fmt.Sprintf(`<navPoint id="navPoint-%d" playOrder="%d"><navLabel><text>Page %d</text></navLabel><content src=%q/></navPoint>`, i+1, i+1, i+1, xmlEscape(href)))
+		navPoints = append(navPoints, ncxNavPoint{
+			ID:        fmt.Sprintf("navPoint-%d", i+1),
+			PlayOrder: i + 1,
+			NavLabel:  ncxNavLabel{Text: fmt.Sprintf("Page %d", i+1)},
+			Content:   ncxContent{Src: href},
+		})
 	}
 	if len(navPoints) == 0 {
-		navPoints = append(navPoints, `<navPoint id="navPoint-1" playOrder="1"><navLabel><text>Start</text></navLabel><content src="#"/></navPoint>`)
+		navPoints = append(navPoints, ncxNavPoint{
+			ID:        "navPoint-1",
+			PlayOrder: 1,
+			NavLabel:  ncxNavLabel{Text: "Start"},
+			Content:   ncxContent{Src: "#"},
+		})
 	}
 
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-  <head>
-    <meta name="dtb:uid" content=%q/>
-  </head>
-  <docTitle><text>%s</text></docTitle>
-  <navMap>
-    %s
-  </navMap>
-</ncx>`, xmlEscape(identifier), xmlEscape(metadata.Title), strings.Join(navPoints, "\n    "))
+	ncx := ncxDocument{
+		Head: ncxHead{
+			Metas: []ncxMeta{{Name: "dtb:uid", Content: identifier}},
+		},
+		DocTitle: ncxDocTitle{Text: metadata.Title},
+		NavMap:   ncxNavMap{NavPoints: navPoints},
+	}
+
+	b, err := xml.MarshalIndent(ncx, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return xml.Header + string(b), nil
 }

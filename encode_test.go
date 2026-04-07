@@ -154,7 +154,7 @@ func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
 	}
 
 	ncxContent := readZipEntry(t, out.Bytes(), "item/toc.ncx")
-	if !strings.Contains(ncxContent, `<meta name="dtb:uid" content="E-2026-0002"/>`) {
+	if !strings.Contains(ncxContent, `<meta name="dtb:uid" content="E-2026-0002"></meta>`) {
 		t.Fatalf("ncx dtb:uid mismatch: %s", ncxContent)
 	}
 }
