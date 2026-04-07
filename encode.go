@@ -347,7 +347,7 @@ func spreadToProperty(spread string) string {
 	case "right":
 		return "page-spread-right"
 	case "center":
-		return "page-spread-center"
+		return "rendition:page-spread-center"
 	default:
 		return ""
 	}
