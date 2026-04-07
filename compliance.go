@@ -41,13 +41,15 @@ func validateCompliance(level ComplianceLevel, files map[string]struct{}, manife
 			return nil, &DecodeError{Path: href, Rule: "manifest-physical-existence", Err: &ManifestPhysicalMissingError{Href: href}}
 		}
 		// Directory and naming rules apply to EBPAJ/KADOKAWA only.
-		if level == LevelEBPAJ || level == LevelKADOKAWA {
+		switch level {
+		case LevelEBPAJ, LevelKADOKAWA:
 			if err := validateDirectoryRule(href); err != nil {
 				return nil, err
 			}
 		}
 		if strings.HasPrefix(item.MediaType, "image/") {
-			if level == LevelEBPAJ || level == LevelKADOKAWA {
+			switch level {
+			case LevelEBPAJ, LevelKADOKAWA:
 				if err := validateImageNaming(level, href); err != nil {
 					return nil, err
 				}
@@ -57,7 +59,7 @@ func validateCompliance(level ComplianceLevel, files map[string]struct{}, manife
 						return nil, err
 					}
 				}
-			} else if level == LevelKindle {
+			case LevelKindle:
 				zf := filesByName[href]
 				if zf != nil {
 					w := validateKindleImageSpecs(zf, href)
@@ -221,7 +223,8 @@ func preflightEncode(level ComplianceLevel, doc *Document) []string {
 		mt := strings.ToLower(strings.TrimSpace(asset.MimeType))
 
 		// Directory layout check (EBPAJ/KADOKAWA only).
-		if level == LevelEBPAJ || level == LevelKADOKAWA {
+		switch level {
+		case LevelEBPAJ, LevelKADOKAWA:
 			dir := path.Dir(href)
 			if dir == "." || (!strings.HasPrefix(href, "item/xhtml/") &&
 				!strings.HasPrefix(href, "item/image/") &&
@@ -244,7 +247,8 @@ func preflightEncode(level ComplianceLevel, doc *Document) []string {
 				}
 			}
 
-			if level == LevelEBPAJ || level == LevelKADOKAWA {
+			switch level {
+			case LevelEBPAJ, LevelKADOKAWA:
 				// File size (4MB limit).
 				if asset.Size > uint64(maxImageFileSize) {
 					warnings = append(warnings, fmt.Sprintf("image %q file size %s exceeds %s limit",
@@ -256,7 +260,7 @@ func preflightEncode(level ComplianceLevel, doc *Document) []string {
 						warnings = append(warnings, w...)
 					}
 				}
-			} else if level == LevelKindle {
+			case LevelKindle:
 				// File size (5MB Kindle limit).
 				if asset.Size > uint64(maxImageFileSizeKindle) {
 					warnings = append(warnings, fmt.Sprintf("image %q file size %s exceeds Kindle %s limit",
