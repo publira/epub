@@ -118,7 +118,7 @@ func TestEncode_GeneratesNavigationDocument(t *testing.T) {
 	}
 
 	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
-	if !strings.Contains(opfContent, `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`) {
+	if !strings.Contains(opfContent, `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav">`) {
 		t.Fatalf("opf nav manifest item missing: %s", opfContent)
 	}
 }
@@ -143,10 +143,10 @@ func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
 	if !strings.Contains(opfContent, `<dc:identifier id="pub-id">E-2026-0002</dc:identifier>`) {
 		t.Fatalf("opf identifier missing: %s", opfContent)
 	}
-	if !strings.Contains(opfContent, `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`) {
+	if !strings.Contains(opfContent, `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav">`) {
 		t.Fatalf("opf nav.xhtml item missing: %s", opfContent)
 	}
-	if !strings.Contains(opfContent, `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`) {
+	if !strings.Contains(opfContent, `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml">`) {
 		t.Fatalf("opf ncx item missing: %s", opfContent)
 	}
 	if !strings.Contains(opfContent, `<spine page-progression-direction="ltr" toc="ncx">`) {
@@ -246,5 +246,190 @@ func testPNGBytes() []byte {
 		0x00, 0x03, 0x01, 0x01, 0x00, 0xc9, 0xfe, 0x92,
 		0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
 		0x44, 0xae, 0x42, 0x60, 0x82,
+	}
+}
+
+func TestEncode_CoverImageAutoFallback(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Cover Auto"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	_, asset, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	expected := `<item id="` + asset.ID + `" href="image/` + asset.ID + `.png" media-type="image/png" properties="cover-image"></item>`
+	if !strings.Contains(opfContent, expected) {
+		t.Fatalf("cover-image property missing in manifest:\n%s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta name="cover" content="`+asset.ID+`"></meta>`) {
+		t.Fatalf("cover meta missing in metadata:\n%s", opfContent)
+	}
+}
+
+func TestEncode_CoverImageExplicit(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Cover Explicit"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	// Add two pages; explicitly set the second as cover.
+	_, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset 1 failed: %v", err)
+	}
+	_, asset2, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "left")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset 2 failed: %v", err)
+	}
+	doc.Metadata.CoverAssetID = asset2.ID
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	expected := `<item id="` + asset2.ID + `" href="image/` + asset2.ID + `.png" media-type="image/png" properties="cover-image"></item>`
+	if !strings.Contains(opfContent, expected) {
+		t.Fatalf("cover-image property missing for explicit cover asset:\n%s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta name="cover" content="`+asset2.ID+`"></meta>`) {
+		t.Fatalf("cover meta missing for explicit cover asset:\n%s", opfContent)
+	}
+
+	// Verify the first asset does NOT have cover-image.
+	if strings.Contains(opfContent, `<item id="p-001" href="image/p-001.png" media-type="image/png" properties="cover-image"`) {
+		t.Fatalf("first asset should not have cover-image property:\n%s", opfContent)
+	}
+}
+
+func TestEncode_CoverImageNavLandmark(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Cover Nav"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	_, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	navContent := readZipEntry(t, out.Bytes(), "item/nav.xhtml")
+	// The cover landmark and bodymatter landmark should both point to the page wrapper.
+	if !strings.Contains(navContent, `epub:type="cover"`) {
+		t.Fatalf("cover landmark missing:\n%s", navContent)
+	}
+	// Cover and bodymatter point to the same single page.
+	coverRe := regexp.MustCompile(`epub:type="cover" href="([^"]+)"`)
+	bodyRe := regexp.MustCompile(`epub:type="bodymatter" href="([^"]+)"`)
+	coverMatch := coverRe.FindStringSubmatch(navContent)
+	bodyMatch := bodyRe.FindStringSubmatch(navContent)
+	if len(coverMatch) < 2 || len(bodyMatch) < 2 {
+		t.Fatalf("could not find cover/bodymatter hrefs:\n%s", navContent)
+	}
+	if coverMatch[1] != bodyMatch[1] {
+		t.Fatalf("cover and bodymatter should point to same page: cover=%q body=%q", coverMatch[1], bodyMatch[1])
+	}
+}
+
+func TestEncodeDecode_CoverImageRoundTrip(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Cover RoundTrip"},
+		Direction: "ltr",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	_, asset, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+	doc.Metadata.CoverAssetID = asset.ID
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoded, err := Decode(bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if decoded.Metadata.CoverAssetID != asset.ID {
+		t.Fatalf("CoverAssetID mismatch: got %q, want %q", decoded.Metadata.CoverAssetID, asset.ID)
+	}
+}
+
+func TestSetCover(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "SetCover Test"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	// Add a body page first.
+	_, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	// Add cover via SetCover; it should be inserted at front.
+	coverPage, coverAsset, err := doc.SetCover(bytes.NewReader(png), int64(len(png)))
+	if err != nil {
+		t.Fatalf("SetCover failed: %v", err)
+	}
+	if coverPage.Type != PageTypeCover {
+		t.Fatalf("cover page Type = %q, want %q", coverPage.Type, PageTypeCover)
+	}
+	if doc.Metadata.CoverAssetID != coverAsset.ID {
+		t.Fatalf("CoverAssetID = %q, want %q", doc.Metadata.CoverAssetID, coverAsset.ID)
+	}
+	if doc.Pages[0] != coverPage {
+		t.Fatalf("cover page should be first in Pages")
+	}
+	if doc.Pages[0].Order != 0 {
+		t.Fatalf("cover page Order = %d, want 0", doc.Pages[0].Order)
+	}
+	if doc.Pages[1].Order != 1 {
+		t.Fatalf("body page Order = %d, want 1", doc.Pages[1].Order)
+	}
+
+	// Encode and decode; Page.Type must survive via cover-image detection.
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+	decoded, err := Decode(bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if decoded.Metadata.CoverAssetID != coverAsset.ID {
+		t.Fatalf("decoded CoverAssetID = %q, want %q", decoded.Metadata.CoverAssetID, coverAsset.ID)
+	}
+	foundCover := false
+	for _, pg := range decoded.Pages {
+		if pg.Type == PageTypeCover {
+			foundCover = true
+			break
+		}
+	}
+	if !foundCover {
+		t.Fatal("no page with PageTypeCover found after decode")
 	}
 }

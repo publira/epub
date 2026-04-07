@@ -45,6 +45,7 @@ type Metadata struct {
 	Identifier        string
 	IdentifierID      string
 	Creators          []Creator
+	CoverAssetID      string
 	EBPAJGuideVersion string
 	KADOKAWAVersion   string
 }
@@ -260,6 +261,32 @@ func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*
 	return page, asset, nil
 }
 
+// SetCover adds a cover image asset and its wrapper page, marking it as the cover
+// in both the metadata (properties="cover-image") and the spine (PageTypeCover).
+// The cover page is inserted at the beginning of Pages (Order 0).
+func (d *Document) SetCover(r io.ReaderAt, size int64) (*Page, *Asset, error) {
+	page, asset, err := d.AddPageWithAsset(r, size, "center")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	d.Metadata.CoverAssetID = asset.ID
+	page.Type = PageTypeCover
+
+	// Move cover page to front of Pages.
+	if len(d.Pages) > 1 {
+		last := len(d.Pages) - 1
+		cover := d.Pages[last]
+		copy(d.Pages[1:], d.Pages[:last])
+		d.Pages[0] = cover
+		for i, pg := range d.Pages {
+			pg.Order = i
+		}
+	}
+
+	return page, asset, nil
+}
+
 func (d *Document) addXHTMLPageAsset(imageHref, imageID string, width, height int) (string, *Asset, error) {
 	if d == nil {
 		return "", nil, ErrNilDocument
@@ -396,6 +423,18 @@ func fileExtFromMimeType(mimeType string) (string, bool) {
 	}
 }
 
+// PageType represents semantic role of a page in the reading order.
+type PageType string
+
+const (
+	// PageTypeStandard is a regular content page (default).
+	PageTypeStandard PageType = ""
+	// PageTypeCover marks the page as the cover page.
+	PageTypeCover PageType = "cover"
+	// PageTypeTOC marks the page as a table of contents page.
+	PageTypeTOC PageType = "toc"
+)
+
 // Page is a single reading-order entry in spine.
 type Page struct {
 	Order   int
@@ -403,7 +442,8 @@ type Page struct {
 	Href    string
 	Width   int
 	Height  int
-	Spread  string // "left", "right", "center", "none".
+	Spread  string   // "left", "right", "center", "none".
+	Type    PageType // Semantic role of the page.
 }
 
 // Asset points to a binary object referenced from EPUB manifest.

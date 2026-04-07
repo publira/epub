@@ -117,6 +117,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 			Identifier:        identifier,
 			IdentifierID:      identifierID,
 			Creators:          parseCreators(pkg.Metadata.Creators, fileAsByRefines),
+			CoverAssetID:      parseCoverAssetID(normalizedManifest, pkg.Metadata.Meta),
 			EBPAJGuideVersion: parseMetaValueByProperty(pkg.Metadata.Meta, "ebpaj:guide-version"),
 			KADOKAWAVersion:   parseMetaValueByProperty(pkg.Metadata.Meta, "kadokawa:version"),
 		},
@@ -164,6 +165,17 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 			page.Height = height
 		}
 		doc.Pages = append(doc.Pages, page)
+	}
+
+	// Mark cover page based on CoverAssetID.
+	if coverID := doc.Metadata.CoverAssetID; coverID != "" {
+		wrapperID := "xhtml-" + coverID
+		for _, pg := range doc.Pages {
+			if pg.AssetID == wrapperID || pg.AssetID == coverID {
+				pg.Type = PageTypeCover
+				break
+			}
+		}
 	}
 
 	reservedPaths := map[string]struct{}{
@@ -496,4 +508,22 @@ func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
 	}
 
 	return nil
+}
+
+func parseCoverAssetID(manifest []manifestItem, meta []metadataMeta) string {
+	for _, item := range manifest {
+		for _, prop := range strings.Fields(item.Properties) {
+			if strings.EqualFold(prop, "cover-image") {
+				return item.ID
+			}
+		}
+	}
+	for _, m := range meta {
+		if strings.EqualFold(strings.TrimSpace(m.Name), "cover") {
+			if v := strings.TrimSpace(m.Content); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
 }

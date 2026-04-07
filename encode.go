@@ -94,6 +94,8 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 	identifierID := normalizeIdentifierID(metadata.IdentifierID)
 	navHref := "nav.xhtml"
 
+	coverAssetID := resolveCoverAssetID(doc, assetPaths)
+
 	manifestItems := make([]string, 0, len(assetPaths))
 	opfDir := "item"
 	for _, p := range assetPaths {
@@ -102,11 +104,27 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		if rel, err := filepath.Rel(opfDir, p); err == nil {
 			href = filepath.ToSlash(rel)
 		}
-		manifestItems = append(manifestItems, fmt.Sprintf(`<item id=%q href=%q media-type=%q/>`, xmlEscape(a.ID), xmlEscape(href), xmlEscape(a.MimeType)))
+		item := manifestItem{ID: a.ID, Href: href, MediaType: a.MimeType}
+		if coverAssetID != "" && a.ID == coverAssetID {
+			item.Properties = "cover-image"
+		}
+		b, err := xml.Marshal(item)
+		if err != nil {
+			return err
+		}
+		manifestItems = append(manifestItems, string(b))
 	}
-	manifestItems = append(manifestItems, fmt.Sprintf(`<item id="nav" href=%q media-type="application/xhtml+xml" properties="nav"/>`, xmlEscape(navHref)))
+	navItemBytes, err := xml.Marshal(manifestItem{ID: "nav", Href: navHref, MediaType: "application/xhtml+xml", Properties: "nav"})
+	if err != nil {
+		return err
+	}
+	manifestItems = append(manifestItems, string(navItemBytes))
 	if cfg.generateLegacyTOC {
-		manifestItems = append(manifestItems, `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`)
+		ncxItemBytes, err := xml.Marshal(manifestItem{ID: "ncx", Href: "toc.ncx", MediaType: "application/x-dtbncx+xml"})
+		if err != nil {
+			return err
+		}
+		manifestItems = append(manifestItems, string(ncxItemBytes))
 	}
 
 	spineItems := make([]string, 0, len(doc.Pages))
@@ -148,6 +166,14 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		}
 	}
 
+	if coverAssetID != "" {
+		coverMetaBytes, err := xml.Marshal(metadataMeta{Name: "cover", Content: coverAssetID})
+		if err != nil {
+			return err
+		}
+		metadataEntries = append(metadataEntries, string(coverMetaBytes))
+	}
+
 	metadataEntries = append(metadataEntries,
 		fmt.Sprintf(`<meta property="rendition:layout">%s</meta>`, xmlEscape(rLayout)),
 		fmt.Sprintf(`<meta property="dcterms:modified">%s</meta>`, xmlEscape(formatW3CTime(time.Now()))),
@@ -176,7 +202,7 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		return err
 	}
 
-	nav, err := buildNavigationDocument(doc, navHref)
+	nav, err := buildNavigationDocument(doc, navHref, coverAssetID)
 	if err != nil {
 		return err
 	}
@@ -270,8 +296,53 @@ func formatW3CTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02T15:04:05Z")
 }
 
-func buildNavigationDocument(doc *Document, navHref string) (string, error) {
-	tocItems := make([]string, 0, len(doc.Pages))
+func resolveCoverAssetID(doc *Document, sortedPaths []string) string {
+	m := doc.effectiveMetadata()
+	if id := strings.TrimSpace(m.CoverAssetID); id != "" {
+		for _, a := range doc.Assets {
+			if a != nil && a.ID == id {
+				return id
+			}
+		}
+		return ""
+	}
+	for _, p := range sortedPaths {
+		a := doc.Assets[p]
+		if a != nil && strings.HasPrefix(a.MimeType, "image/") {
+			return a.ID
+		}
+	}
+	return ""
+}
+
+func resolveCoverPageHref(doc *Document, coverAssetID string) string {
+	if coverAssetID == "" {
+		return ""
+	}
+	// Prefer page explicitly marked as cover.
+	for _, pg := range doc.Pages {
+		if pg.Type == PageTypeCover {
+			href := strings.TrimSpace(pg.Href)
+			if href != "" {
+				return strings.TrimPrefix(href, "item/")
+			}
+		}
+	}
+	// Fallback: find XHTML wrapper matching coverAssetID.
+	wrapperID := "xhtml-" + coverAssetID
+	for _, pg := range doc.Pages {
+		if pg.AssetID == wrapperID || pg.AssetID == coverAssetID {
+			href := strings.TrimSpace(pg.Href)
+			if href != "" {
+				return strings.TrimPrefix(href, "item/")
+			}
+		}
+	}
+	return ""
+}
+
+func buildNavigationDocument(doc *Document, navHref string, coverAssetID string) (string, error) {
+	tocItems := make([]navListItem, 0, len(doc.Pages))
 	for i, pg := range doc.Pages {
 		href := strings.TrimSpace(pg.Href)
 		if href == "" {
@@ -284,49 +355,69 @@ func buildNavigationDocument(doc *Document, navHref string) (string, error) {
 				}
 			}
 		}
-		href = xmlEscape(strings.TrimPrefix(cleanOPFRef("item", href), "item/"))
+		href = strings.TrimPrefix(href, "item/")
 		if href == "" {
 			href = "#"
 		}
-		tocItems = append(tocItems, fmt.Sprintf(`<li><a href=%q>Page %d</a></li>`, href, i+1))
+		tocItems = append(tocItems, navListItem{
+			Anchor: navLandmarkAnchor{Href: href, Text: fmt.Sprintf("Page %d", i+1)},
+		})
 	}
 	if len(tocItems) == 0 {
-		tocItems = append(tocItems, `<li><a href="#">Start</a></li>`)
+		tocItems = []navListItem{{Anchor: navLandmarkAnchor{Href: "#", Text: "Start"}}}
+	}
+
+	coverHref := resolveCoverPageHref(doc, coverAssetID)
+	if coverHref == "" && len(doc.Pages) > 0 {
+		first := strings.TrimSpace(doc.Pages[0].Href)
+		if first != "" {
+			coverHref = strings.TrimPrefix(first, "item/")
+		}
+	}
+	if coverHref == "" {
+		coverHref = "#"
 	}
 
 	bodyHref := "#"
 	if len(doc.Pages) > 0 {
 		first := strings.TrimSpace(doc.Pages[0].Href)
 		if first != "" {
-			bodyHref = xmlEscape(strings.TrimPrefix(cleanOPFRef("item", first), "item/"))
+			bodyHref = strings.TrimPrefix(first, "item/")
 		}
 	}
 	if bodyHref == "" {
 		bodyHref = "#"
 	}
 
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-  <head>
-    <title>Navigation</title>
-  </head>
-  <body>
-    <nav epub:type="toc" id="toc">
-      <h1>Navigation</h1>
-      <ol>
-        %s
-      </ol>
-    </nav>
-    <nav epub:type="landmarks" id="landmarks">
-      <h2>Landmarks</h2>
-      <ol>
-        <li><a epub:type="cover" href=%q>Cover</a></li>
-        <li><a epub:type="toc" href=%q>Navigation</a></li>
-        <li><a epub:type="bodymatter" href=%q>Body</a></li>
-      </ol>
-    </nav>
-  </body>
-</html>`, strings.Join(tocItems, "\n        "), bodyHref, xmlEscape(navHref), bodyHref), nil
+	navDoc := navDocument{
+		Head: navDocHead{Title: "Navigation"},
+		Sections: []navSection{
+			{
+				EpubType:    "toc",
+				ID:          "toc",
+				HeadingTag:  "h1",
+				HeadingText: "Navigation",
+				Items:       tocItems,
+			},
+			{
+				EpubType:    "landmarks",
+				ID:          "landmarks",
+				HeadingTag:  "h2",
+				HeadingText: "Landmarks",
+				Items: []navListItem{
+					{Anchor: navLandmarkAnchor{EpubType: "cover", Href: coverHref, Text: "Cover"}},
+					{Anchor: navLandmarkAnchor{EpubType: "toc", Href: navHref, Text: "Navigation"}},
+					{Anchor: navLandmarkAnchor{EpubType: "bodymatter", Href: bodyHref, Text: "Body"}},
+				},
+			},
+		},
+	}
+
+	b, err := xml.MarshalIndent(navDoc, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return xml.Header + string(b), nil
 }
 
 func buildLegacyNCX(doc *Document, identifier string) string {

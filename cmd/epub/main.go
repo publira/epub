@@ -228,6 +228,7 @@ func runBuildFromImages(args []string) error {
 	layout := fs.String("layout", "pre-paginated", "pre-paginated|reflowable")
 	spread := fs.String("spread", "right", "left|right|center|none")
 	globPattern := fs.String("glob", "", "glob pattern for images (e.g. ./images/*.jpg)")
+	cover := fs.String("cover", "", "path to cover image (added as first page with cover semantics)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -281,6 +282,18 @@ func runBuildFromImages(args []string) error {
 			_ = f.Close()
 		}
 	}()
+
+	// Add cover image first if specified.
+	if cp := strings.TrimSpace(*cover); cp != "" {
+		cf, csize, err := openReaderAt(cp)
+		if err != nil {
+			return err
+		}
+		openFiles = append(openFiles, cf)
+		if _, _, err := doc.SetCover(cf, csize); err != nil {
+			return err
+		}
+	}
 
 	for _, p := range imagePaths {
 		f, size, err := openReaderAt(p)

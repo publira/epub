@@ -3,6 +3,7 @@
 package epub_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,6 +133,69 @@ func TestTestdata_DPFJTemplates(t *testing.T) {
 			}
 			if doc.Direction != "rtl" {
 				t.Errorf("Direction = %q, want rtl", doc.Direction)
+			}
+		})
+	}
+}
+
+func TestTestdata_CoverImageRoundTrip(t *testing.T) {
+	paths := testdataEPUBs(t)
+	if len(paths) == 0 {
+		t.Skip("no epub files in testdata/ (see testdata/README.md)")
+	}
+	for _, p := range paths {
+		base := filepath.Base(p)
+		// Skip sizecheck EPUBs; they are intentionally non-compliant.
+		if strings.Contains(base, "sizecheck") {
+			continue
+		}
+		t.Run(base, func(t *testing.T) {
+			f, err := os.Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+
+			st, err := f.Stat()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			doc, err := epub.Decode(f, st.Size())
+			if err != nil {
+				t.Fatalf("Decode failed: %v", err)
+			}
+
+			coverID := doc.Metadata.CoverAssetID
+			if coverID == "" {
+				t.Log("no cover-image detected; skipping round-trip check")
+				return
+			}
+
+			// Verify the cover asset actually exists.
+			found := false
+			for _, a := range doc.Assets {
+				if a != nil && a.ID == coverID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("CoverAssetID %q not found in assets", coverID)
+			}
+
+			// Encode back and decode; CoverAssetID must survive.
+			var buf bytes.Buffer
+			if err := epub.Encode(&buf, doc); err != nil {
+				t.Fatalf("Encode failed: %v", err)
+			}
+
+			doc2, err := epub.Decode(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+			if err != nil {
+				t.Fatalf("re-Decode failed: %v", err)
+			}
+			if doc2.Metadata.CoverAssetID != coverID {
+				t.Errorf("CoverAssetID after round-trip = %q, want %q", doc2.Metadata.CoverAssetID, coverID)
 			}
 		})
 	}
