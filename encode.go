@@ -224,12 +224,13 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 			metaEntries = append(metaEntries,
 				metadataMeta{Name: "original-resolution", Content: res},
 			)
-			bookType := strings.TrimSpace(metadata.BookType)
-			if bookType != "" {
-				metaEntries = append(metaEntries,
-					metadataMeta{Name: "book-type", Content: bookType},
-				)
-			}
+		}
+
+		bookType := strings.TrimSpace(metadata.BookType)
+		if bookType != "" {
+			metaEntries = append(metaEntries,
+				metadataMeta{Name: "book-type", Content: bookType},
+			)
 		}
 	}
 
