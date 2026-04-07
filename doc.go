@@ -10,16 +10,27 @@
 // Key points:
 //
 //   - Fail-fast decoding with DecodeError path/rule context.
-//   - Compliance modes for flexible, EBPAJ, and KADOKAWA-oriented checks.
+//   - Pluggable [Validator] interface with profile sub-packages
+//     ([github.com/publira/epub/profile/ebpaj],
+//     [github.com/publira/epub/profile/kadokawa],
+//     [github.com/publira/epub/profile/kindle]).
 //   - Stream-first asset model via Asset.Open to avoid large in-memory blobs.
 //   - Helper methods on Document to auto-generate spec-friendly image IDs/paths.
 //
-// Basic decode example:
+// Basic decode example with validators:
+//
+//	import (
+//		"github.com/publira/epub"
+//		"github.com/publira/epub/profile/kadokawa"
+//		"github.com/publira/epub/profile/kindle"
+//	)
 //
 //	f, _ := os.Open("book.epub")
 //	defer f.Close()
 //	stat, _ := f.Stat()
-//	doc, err := epub.Decode(f, stat.Size(), epub.WithCompliance(epub.LevelEBPAJ))
+//	doc, err := epub.Decode(f, stat.Size(),
+//		epub.WithValidator(kadokawa.New(), kindle.New()),
+//	)
 //	if err != nil {
 //		// handle DecodeError
 //	}

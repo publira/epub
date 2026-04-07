@@ -18,20 +18,18 @@ const (
 	defaultKADOKAWAVersion   = "1.0"
 )
 
-// EncodeOption mutates encode behavior.
-type EncodeOption func(*encodeConfig)
-
 type encodeConfig struct {
 	generateLegacyTOC   bool
 	preflightCompliance ComplianceLevel
+	preflightValidators []Validator
 	warningCollector    func(string)
 }
 
 // WithLegacyTOC enables generation of EPUB 2 toc.ncx alongside EPUB 3 navigation.
 func WithLegacyTOC() EncodeOption {
-	return func(cfg *encodeConfig) {
+	return encodeOptionFunc(func(cfg *encodeConfig) {
 		cfg.generateLegacyTOC = true
-	}
+	})
 }
 
 // WithEncodePreflightCompliance enables preflight compliance checks before
@@ -39,19 +37,21 @@ func WithLegacyTOC() EncodeOption {
 // actual checks; LevelFlexible is accepted but performs no validation.
 // Detected violations are delivered as non-fatal warnings through the collector
 // registered via [WithEncodeWarningCollector].
+//
+// Deprecated: Use [WithValidator] with profile sub-packages instead.
 func WithEncodePreflightCompliance(level ComplianceLevel) EncodeOption {
-	return func(cfg *encodeConfig) {
+	return encodeOptionFunc(func(cfg *encodeConfig) {
 		cfg.preflightCompliance = level
-	}
+	})
 }
 
 // WithEncodeWarningCollector registers a callback that receives each preflight
 // warning string.  The callback is invoked synchronously before ZIP writing
 // begins.  If no collector is set, preflight warnings are silently discarded.
 func WithEncodeWarningCollector(fn func(string)) EncodeOption {
-	return func(cfg *encodeConfig) {
+	return encodeOptionFunc(func(cfg *encodeConfig) {
 		cfg.warningCollector = fn
-	}
+	})
 }
 
 // Encode writes a normalized Document into EPUB ZIP stream.
@@ -61,7 +61,7 @@ func Encode(w io.Writer, doc *Document, opts ...EncodeOption) error {
 	}
 	cfg := encodeConfig{}
 	for _, opt := range opts {
-		opt(&cfg)
+		opt.applyEncode(&cfg)
 	}
 
 	if cfg.preflightCompliance != LevelFlexible {
@@ -69,6 +69,23 @@ func Encode(w io.Writer, doc *Document, opts ...EncodeOption) error {
 		if cfg.warningCollector != nil {
 			for _, w := range warnings {
 				cfg.warningCollector(w)
+			}
+		}
+	}
+
+	if len(cfg.preflightValidators) > 0 {
+		for _, v := range cfg.preflightValidators {
+			for _, err := range v.ValidateDocument(doc) {
+				if cfg.warningCollector != nil {
+					cfg.warningCollector(err.Error())
+				}
+			}
+			for href, asset := range doc.Assets {
+				for _, err := range v.ValidateAsset(href, asset) {
+					if cfg.warningCollector != nil {
+						cfg.warningCollector(err.Error())
+					}
+				}
 			}
 		}
 	}

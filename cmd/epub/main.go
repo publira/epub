@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/publira/epub"
+	"github.com/publira/epub/profile/ebpaj"
+	"github.com/publira/epub/profile/kadokawa"
 )
 
 func main() {
@@ -68,11 +70,11 @@ func runInspect(args []string) error {
 	}
 	defer func() { _ = f.Close() }()
 
-	level, err := parseCompliance(*compliance)
+	validators, err := parseValidators(*compliance)
 	if err != nil {
 		return err
 	}
-	doc, err := epub.Decode(f, size, epub.WithCompliance(level))
+	doc, err := epub.Decode(f, size, epub.WithValidator(validators...))
 	if err != nil {
 		return err
 	}
@@ -135,11 +137,11 @@ func runListImages(args []string) error {
 	}
 	defer func() { _ = f.Close() }()
 
-	level, err := parseCompliance(*compliance)
+	validators, err := parseValidators(*compliance)
 	if err != nil {
 		return err
 	}
-	doc, err := epub.Decode(f, size, epub.WithCompliance(level))
+	doc, err := epub.Decode(f, size, epub.WithValidator(validators...))
 	if err != nil {
 		return err
 	}
@@ -238,7 +240,7 @@ func runBuildFromImages(args []string) error {
 		return fmt.Errorf("-out is required")
 	}
 
-	level, err := parseCompliance(*compliance)
+	level, err := parseValidators(*compliance)
 	if err != nil {
 		return err
 	}
@@ -333,7 +335,7 @@ func runBuildFromImages(args []string) error {
 		return err
 	}
 	defer func() { _ = verifyFile.Close() }()
-	if _, err := epub.Decode(verifyFile, verifySize, epub.WithCompliance(level)); err != nil {
+	if _, err := epub.Decode(verifyFile, verifySize, epub.WithValidator(level...)); err != nil {
 		return fmt.Errorf("generated epub failed %s compliance validation: %w", strings.ToLower(strings.TrimSpace(*compliance)), err)
 	}
 
@@ -360,11 +362,11 @@ func runRepack(args []string) error {
 	}
 	defer func() { _ = inFile.Close() }()
 
-	level, err := parseCompliance(*compliance)
+	validators, err := parseValidators(*compliance)
 	if err != nil {
 		return err
 	}
-	doc, err := epub.Decode(inFile, size, epub.WithCompliance(level))
+	doc, err := epub.Decode(inFile, size, epub.WithValidator(validators...))
 	if err != nil {
 		return err
 	}
@@ -400,16 +402,16 @@ func openReaderAt(path string) (*os.File, int64, error) {
 	return f, st.Size(), nil
 }
 
-func parseCompliance(s string) (epub.ComplianceLevel, error) {
+func parseValidators(s string) ([]epub.Validator, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "", "flexible":
-		return epub.LevelFlexible, nil
+		return nil, nil
 	case "ebpaj":
-		return epub.LevelEBPAJ, nil
+		return []epub.Validator{ebpaj.New()}, nil
 	case "kadokawa":
-		return epub.LevelKADOKAWA, nil
+		return []epub.Validator{kadokawa.New()}, nil
 	default:
-		return epub.LevelFlexible, fmt.Errorf("unknown compliance: %s", s)
+		return nil, fmt.Errorf("unknown compliance: %s", s)
 	}
 }
 

@@ -512,3 +512,111 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 	}
 	return buf.Bytes()
 }
+
+// --- WithValidator tests ---
+
+// stubValidator is a test Validator that returns errors for specific hrefs.
+type stubValidator struct {
+	assetErrors map[string][]error
+	docErrors   []error
+}
+
+func (v *stubValidator) ValidateDocument(_ *Document) []error { return v.docErrors }
+
+func (v *stubValidator) ValidateAsset(href string, _ *Asset) []error {
+	return v.assetErrors[href]
+}
+
+func TestDecode_WithValidator_FatalError(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	v := &stubValidator{
+		assetErrors: map[string][]error{
+			"item/image/p-001.jpg": {errors.New("image is bad")},
+		},
+	}
+	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)), WithValidator(v))
+	if err == nil {
+		t.Fatal("expected error from validator")
+	}
+	var de *DecodeError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected DecodeError, got: %T", err)
+	}
+	if de.Rule != "validator" {
+		t.Fatalf("unexpected rule: %s", de.Rule)
+	}
+}
+
+func TestDecode_WithValidator_Warning(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	v := &stubValidator{
+		assetErrors: map[string][]error{
+			"item/image/p-001.jpg": {&ValidationWarningError{Message: "soft issue"}},
+		},
+	}
+	doc, err := Decode(bytes.NewReader(epubData), int64(len(epubData)), WithValidator(v))
+	if err != nil {
+		t.Fatalf("expected no fatal error, got: %v", err)
+	}
+	found := false
+	for _, w := range doc.Warnings {
+		if strings.Contains(w, "soft issue") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected warning 'soft issue', got: %v", doc.Warnings)
+	}
+}
+
+func TestDecode_WithValidator_DocumentLevelError(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	v := &stubValidator{
+		docErrors: []error{errors.New("doc-level issue")},
+	}
+	_, err := Decode(bytes.NewReader(epubData), int64(len(epubData)), WithValidator(v))
+	if err == nil {
+		t.Fatal("expected error from document-level validator")
+	}
+}
+
+func TestDecode_WithValidator_MultipleValidators(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	v1 := &stubValidator{
+		assetErrors: map[string][]error{
+			"item/image/p-001.jpg": {&ValidationWarningError{Message: "warning-from-v1"}},
+		},
+	}
+	v2 := &stubValidator{
+		assetErrors: map[string][]error{
+			"item/image/p-001.jpg": {&ValidationWarningError{Message: "warning-from-v2"}},
+		},
+	}
+	doc, err := Decode(bytes.NewReader(epubData), int64(len(epubData)), WithValidator(v1, v2))
+	if err != nil {
+		t.Fatalf("expected no fatal error, got: %v", err)
+	}
+	foundV1, foundV2 := false, false
+	for _, w := range doc.Warnings {
+		if strings.Contains(w, "warning-from-v1") {
+			foundV1 = true
+		}
+		if strings.Contains(w, "warning-from-v2") {
+			foundV2 = true
+		}
+	}
+	if !foundV1 || !foundV2 {
+		t.Fatalf("expected warnings from both validators, got: %v", doc.Warnings)
+	}
+}
+
+func TestDecode_WithValidator_NoValidators(t *testing.T) {
+	epubData := makeMinimalEPUB(t, minimalEPUBConfig{mimetypeFirst: true})
+	doc, err := Decode(bytes.NewReader(epubData), int64(len(epubData)))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if doc.Metadata.Title != "Test Book" {
+		t.Fatalf("unexpected title: %s", doc.Metadata.Title)
+	}
+}

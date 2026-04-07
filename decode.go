@@ -23,7 +23,7 @@ var viewportPattern = regexp.MustCompile(`(?i)width\s*=\s*([0-9]+)\s*,\s*height\
 func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) {
 	cfg := defaultDecodeConfig()
 	for _, opt := range opts {
-		opt(&cfg)
+		opt.applyDecode(&cfg)
 	}
 
 	zr, err := zip.NewReader(r, size)
@@ -202,6 +202,29 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		}
 	}
 
+	doc.Warnings = warnings
+
+	// Run pluggable validators registered via WithValidator.
+	for _, v := range cfg.validators {
+		for _, err := range v.ValidateDocument(doc) {
+			var w *ValidationWarningError
+			if errors.As(err, &w) {
+				addWarning(w.Message)
+			} else {
+				return nil, &DecodeError{Path: "", Rule: "validator", Err: err}
+			}
+		}
+		for href, asset := range doc.Assets {
+			for _, err := range v.ValidateAsset(href, asset) {
+				var w *ValidationWarningError
+				if errors.As(err, &w) {
+					addWarning(w.Message)
+				} else {
+					return nil, &DecodeError{Path: href, Rule: "validator", Err: err}
+				}
+			}
+		}
+	}
 	doc.Warnings = warnings
 
 	return doc, nil
