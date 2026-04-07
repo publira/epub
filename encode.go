@@ -290,7 +290,7 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		return err
 	}
 
-	nav, err := buildNavigationDocument(doc, navHref, coverAssetID)
+	nav, err := buildNavigationDocument(doc, coverAssetID)
 	if err != nil {
 		return err
 	}
@@ -446,7 +446,7 @@ func resolveCoverPageHref(doc *Document, coverAssetID string) string {
 	return ""
 }
 
-func buildNavigationDocument(doc *Document, navHref string, coverAssetID string) (string, error) {
+func buildNavigationDocument(doc *Document, coverAssetID string) (string, error) {
 	tocItems := make([]navListItem, 0, len(doc.Pages))
 	for i, pg := range doc.Pages {
 		href := strings.TrimSpace(pg.Href)
@@ -511,7 +511,6 @@ func buildNavigationDocument(doc *Document, navHref string, coverAssetID string)
 				HeadingText: "Landmarks",
 				Items: []navListItem{
 					{Anchor: navLandmarkAnchor{EpubType: "cover", Href: coverHref, Text: "Cover"}},
-					{Anchor: navLandmarkAnchor{EpubType: "toc", Href: navHref, Text: "Navigation"}},
 					{Anchor: navLandmarkAnchor{EpubType: "bodymatter", Href: bodyHref, Text: "Body"}},
 				},
 			},
