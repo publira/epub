@@ -112,12 +112,12 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 
 	doc := &Document{
 		Metadata: Metadata{
-			Title:             title,
-			TitleFileAs:       titleFileAs,
-			Identifier:        identifier,
-			IdentifierID:      identifierID,
-			Creators:          parseCreators(pkg.Metadata.Creators, fileAsByRefines),
-			CoverAssetID:      parseCoverAssetID(normalizedManifest, pkg.Metadata.Meta),
+			Title:                title,
+			TitleFileAs:          titleFileAs,
+			Identifier:           identifier,
+			IdentifierID:         identifierID,
+			Creators:             parseCreators(pkg.Metadata.Creators, fileAsByRefines),
+			CoverAssetID:         parseCoverAssetID(normalizedManifest, pkg.Metadata.Meta),
 			RenditionSpread:      parseMetaValueByProperty(pkg.Metadata.Meta, "rendition:spread"),
 			RenditionOrientation: parseMetaValueByProperty(pkg.Metadata.Meta, "rendition:orientation"),
 			EBPAJGuideVersion:    parseMetaValueByProperty(pkg.Metadata.Meta, "ebpaj:guide-version"),
