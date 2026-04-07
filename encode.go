@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -354,7 +356,7 @@ func spreadToProperty(spread string) string {
 func normalizeIdentifier(v string) string {
 	v = strings.TrimSpace(v)
 	if v == "" {
-		return "urn:uuid:generated"
+		return "urn:uuid:" + uuid.NewString()
 	}
 	return v
 }

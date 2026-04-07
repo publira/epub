@@ -984,3 +984,26 @@ func TestEncode_KindleMetadata_BookTypeMagazine(t *testing.T) {
 		t.Fatalf("book-type should be magazine:\n%s", opf)
 	}
 }
+
+func TestEncode_FallbackIdentifierIsValidUUID(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "UUID Test"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	uuidPattern := regexp.MustCompile(`<dc:identifier id="pub-id">urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}</dc:identifier>`)
+	if !uuidPattern.MatchString(opfContent) {
+		t.Fatalf("fallback identifier is not a valid UUID format:\n%s", opfContent)
+	}
+}
