@@ -24,9 +24,10 @@ var imageNamePatternKADOKAWA = regexp.MustCompile(`^item/image/[a-z][a-z0-9_-]*\
 
 // Image spec constants (Issue #5 requirements)
 const (
-	maxImagePixelCount = 4000000
-	maxImageFileSize   = 4 * 1024 * 1024 // 4MB
-	maxXHTMLFileSize   = 256 * 1024      // 256KB
+	maxImagePixelCount     = 4000000
+	maxImageFileSize       = 4 * 1024 * 1024 // 4MB
+	maxImageFileSizeKindle = 5 * 1024 * 1024 // 5MB (Amazon KDP limit)
+	maxXHTMLFileSize       = 256 * 1024      // 256KB
 )
 
 func validateCompliance(level ComplianceLevel, files map[string]struct{}, manifest map[string]manifestItem, filesByName map[string]*zip.File) (*[]string, error) {
@@ -39,20 +40,28 @@ func validateCompliance(level ComplianceLevel, files map[string]struct{}, manife
 		if _, ok := files[href]; !ok {
 			return nil, &DecodeError{Path: href, Rule: "manifest-physical-existence", Err: &ManifestPhysicalMissingError{Href: href}}
 		}
-		if err := validateDirectoryRule(href); err != nil {
-			return nil, err
-		}
-		if strings.HasPrefix(item.MediaType, "image/") {
-			if err := validateImageNaming(level, href); err != nil {
+		// Directory and naming rules apply to EBPAJ/KADOKAWA only.
+		if level == LevelEBPAJ || level == LevelKADOKAWA {
+			if err := validateDirectoryRule(href); err != nil {
 				return nil, err
 			}
-			// Validate image specs based on compliance level
-			if level == LevelKADOKAWA || level == LevelEBPAJ {
+		}
+		if strings.HasPrefix(item.MediaType, "image/") {
+			if level == LevelEBPAJ || level == LevelKADOKAWA {
+				if err := validateImageNaming(level, href); err != nil {
+					return nil, err
+				}
 				zf := filesByName[href]
 				if zf != nil {
 					if err := validateImageSpecs(zf, href); err != nil {
 						return nil, err
 					}
+				}
+			} else if level == LevelKindle {
+				zf := filesByName[href]
+				if zf != nil {
+					w := validateKindleImageSpecs(zf, href)
+					warnings = append(warnings, w...)
 				}
 			}
 		} else if strings.HasPrefix(item.MediaType, "application/xhtml+xml") {
@@ -197,7 +206,7 @@ func validateJPEGSpecs(r io.Reader, href string) error {
 
 // preflightEncode runs lightweight compliance checks against a Document before
 // encoding.  It returns non-fatal warning strings; it never returns errors.
-// Only strict profiles (LevelEBPAJ, LevelKADOKAWA) produce meaningful output.
+// Only strict profiles (LevelEBPAJ, LevelKADOKAWA, LevelKindle) produce meaningful output.
 func preflightEncode(level ComplianceLevel, doc *Document) []string {
 	if level == LevelFlexible || doc == nil {
 		return nil
@@ -211,17 +220,19 @@ func preflightEncode(level ComplianceLevel, doc *Document) []string {
 		}
 		mt := strings.ToLower(strings.TrimSpace(asset.MimeType))
 
-		// Directory layout check.
-		dir := path.Dir(href)
-		if dir == "." || (!strings.HasPrefix(href, "item/xhtml/") &&
-			!strings.HasPrefix(href, "item/image/") &&
-			!strings.HasPrefix(href, "item/style/") &&
-			dir != "item") {
-			warnings = append(warnings, fmt.Sprintf("asset %q does not follow the expected directory layout", href))
+		// Directory layout check (EBPAJ/KADOKAWA only).
+		if level == LevelEBPAJ || level == LevelKADOKAWA {
+			dir := path.Dir(href)
+			if dir == "." || (!strings.HasPrefix(href, "item/xhtml/") &&
+				!strings.HasPrefix(href, "item/image/") &&
+				!strings.HasPrefix(href, "item/style/") &&
+				dir != "item") {
+				warnings = append(warnings, fmt.Sprintf("asset %q does not follow the expected directory layout", href))
+			}
 		}
 
 		if strings.HasPrefix(mt, "image/") {
-			// Image naming.
+			// Image naming (EBPAJ/KADOKAWA only).
 			switch level {
 			case LevelEBPAJ:
 				if !imageNamePatternEBPAJ.MatchString(href) {
@@ -233,16 +244,29 @@ func preflightEncode(level ComplianceLevel, doc *Document) []string {
 				}
 			}
 
-			// File size.
-			if asset.Size > uint64(maxImageFileSize) {
-				warnings = append(warnings, fmt.Sprintf("image %q file size %s exceeds %s limit",
-					href, formatBytes(int64(asset.Size)), formatBytes(maxImageFileSize)))
-			}
-
-			// Pixel count and progressive JPEG (requires opening asset).
-			if asset.Open != nil {
-				if w := preflightImageSpecs(href, asset); len(w) > 0 {
-					warnings = append(warnings, w...)
+			if level == LevelEBPAJ || level == LevelKADOKAWA {
+				// File size (4MB limit).
+				if asset.Size > uint64(maxImageFileSize) {
+					warnings = append(warnings, fmt.Sprintf("image %q file size %s exceeds %s limit",
+						href, formatBytes(int64(asset.Size)), formatBytes(maxImageFileSize)))
+				}
+				// Pixel count and progressive JPEG (requires opening asset).
+				if asset.Open != nil {
+					if w := preflightImageSpecs(href, asset); len(w) > 0 {
+						warnings = append(warnings, w...)
+					}
+				}
+			} else if level == LevelKindle {
+				// File size (5MB Kindle limit).
+				if asset.Size > uint64(maxImageFileSizeKindle) {
+					warnings = append(warnings, fmt.Sprintf("image %q file size %s exceeds Kindle %s limit",
+						href, formatBytes(int64(asset.Size)), formatBytes(maxImageFileSizeKindle)))
+				}
+				// Progressive JPEG (requires opening asset).
+				if asset.Open != nil {
+					if w := preflightKindleImageSpecs(href, asset); len(w) > 0 {
+						warnings = append(warnings, w...)
+					}
 				}
 			}
 		} else if strings.Contains(mt, "xhtml") {
@@ -297,4 +321,70 @@ func isProgressiveJPEG(data []byte) bool {
 		}
 	}
 	return false
+}
+
+// validateKindleImageSpecs checks Kindle-specific image constraints during decode.
+// Violations are returned as warnings, not errors.
+func validateKindleImageSpecs(zf *zip.File, href string) []string {
+	var warnings []string
+
+	// Check file size (5MB Kindle limit).
+	if zf.UncompressedSize64 > uint64(maxImageFileSizeKindle) {
+		warnings = append(warnings, fmt.Sprintf("image %q file size %s exceeds Kindle %s limit",
+			href, formatBytes(int64(zf.UncompressedSize64)), formatBytes(maxImageFileSizeKindle)))
+	}
+
+	// Open file to inspect JPEG encoding.
+	rc, err := zf.Open()
+	if err != nil {
+		return warnings
+	}
+	defer func() { _ = rc.Close() }()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return warnings
+	}
+
+	_, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return warnings
+	}
+
+	if format == "jpeg" {
+		if isProgressiveJPEG(data) {
+			warnings = append(warnings, fmt.Sprintf("image %q is a progressive JPEG, which is not supported by Kindle", href))
+		}
+	}
+
+	return warnings
+}
+
+// preflightKindleImageSpecs checks Kindle-specific image constraints during encode preflight.
+func preflightKindleImageSpecs(href string, asset *Asset) []string {
+	rc, err := asset.Open()
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rc.Close() }()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil
+	}
+
+	var warnings []string
+
+	_, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil
+	}
+
+	if format == "jpeg" {
+		if isProgressiveJPEG(data) {
+			warnings = append(warnings, fmt.Sprintf("image %q is a progressive JPEG, which is not supported by Kindle", href))
+		}
+	}
+
+	return warnings
 }

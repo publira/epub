@@ -12,6 +12,8 @@ const (
 	LevelEBPAJ
 	// LevelKADOKAWA enforces KADOKAWA-oriented naming and directory conventions.
 	LevelKADOKAWA
+	// LevelKindle enforces Amazon Kindle (KDP) publishing guidelines.
+	LevelKindle
 )
 
 // decodeConfig stores Decode options.
