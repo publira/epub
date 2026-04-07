@@ -202,6 +202,32 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		metadataMeta{Property: "kadokawa:version", Value: normalizeSpecVersion(metadata.KADOKAWAVersion, defaultKADOKAWAVersion)},
 	)
 
+	// For pre-paginated layouts, auto-inject Kindle compatibility metadata.
+	if doc.Layout == LayoutPrePaginated && len(doc.Pages) > 0 {
+		var basePage *Page
+
+		// Find the first non-cover page to use as the baseline resolution.
+		for _, p := range doc.Pages {
+			if p.Type != PageTypeCover && p.Width > 0 && p.Height > 0 {
+				basePage = p
+				break
+			}
+		}
+
+		// Fallback to the first page if all pages are covers or lack dimensions.
+		if basePage == nil && doc.Pages[0].Width > 0 && doc.Pages[0].Height > 0 {
+			basePage = doc.Pages[0]
+		}
+
+		if basePage != nil {
+			res := fmt.Sprintf("%dx%d", basePage.Width, basePage.Height)
+			metaEntries = append(metaEntries,
+				metadataMeta{Name: "original-resolution", Content: res},
+				metadataMeta{Name: "book-type", Content: "comic"},
+			)
+		}
+	}
+
 	spineTOC := ""
 	if cfg.generateLegacyTOC {
 		spineTOC = "ncx"

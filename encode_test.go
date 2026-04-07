@@ -785,3 +785,139 @@ func TestEncodeDecode_LanguageRoundTrip(t *testing.T) {
 		t.Fatalf("Language mismatch: got %q, want %q", decoded.Metadata.Language, "zh-Hans")
 	}
 }
+
+func TestEncode_KindleMetadata_PrePaginated(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Fixed Layout"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Pages: []*Page{
+			{Order: 0, AssetID: "p-001", Width: 1080, Height: 1920, Spread: "right"},
+		},
+		Assets: map[string]*Asset{
+			"item/image/p-001.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake-image"))), nil
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opf := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opf, `name="original-resolution" content="1080x1920"`) {
+		t.Fatalf("original-resolution missing or wrong:\n%s", opf)
+	}
+	if !strings.Contains(opf, `name="book-type" content="comic"`) {
+		t.Fatalf("book-type missing:\n%s", opf)
+	}
+}
+
+func TestEncode_KindleMetadata_SkipsCoverPage(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Cover Skip"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Pages: []*Page{
+			{Order: 0, AssetID: "cover", Width: 2000, Height: 2800, Spread: "center", Type: PageTypeCover},
+			{Order: 1, AssetID: "p-001", Width: 1080, Height: 1920, Spread: "right"},
+		},
+		Assets: map[string]*Asset{
+			"item/image/cover.jpg": {
+				ID:       "cover",
+				MimeType: "image/jpeg",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake-cover"))), nil
+				},
+			},
+			"item/image/p-001.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake-image"))), nil
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opf := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	// Should use body page dimensions, not cover dimensions.
+	if !strings.Contains(opf, `name="original-resolution" content="1080x1920"`) {
+		t.Fatalf("original-resolution should use body page dimensions:\n%s", opf)
+	}
+}
+
+func TestEncode_KindleMetadata_FallbackToCover(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Cover Only"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Pages: []*Page{
+			{Order: 0, AssetID: "cover", Width: 2000, Height: 2800, Spread: "center", Type: PageTypeCover},
+		},
+		Assets: map[string]*Asset{
+			"item/image/cover.jpg": {
+				ID:       "cover",
+				MimeType: "image/jpeg",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake-cover"))), nil
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opf := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	// With only cover pages, should fall back to cover dimensions.
+	if !strings.Contains(opf, `name="original-resolution" content="2000x2800"`) {
+		t.Fatalf("original-resolution should fall back to cover page:\n%s", opf)
+	}
+}
+
+func TestEncode_KindleMetadata_Reflowable_NoInjection(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Reflow"},
+		Direction: "ltr",
+		Layout:    LayoutReflowable,
+		Pages: []*Page{
+			{Order: 0, AssetID: "p-001", Width: 1080, Height: 1920, Spread: "none"},
+		},
+		Assets: map[string]*Asset{
+			"item/image/p-001.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake-image"))), nil
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opf := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if strings.Contains(opf, `original-resolution`) {
+		t.Fatalf("reflowable should not have original-resolution:\n%s", opf)
+	}
+	if strings.Contains(opf, `book-type`) {
+		t.Fatalf("reflowable should not have book-type:\n%s", opf)
+	}
+}
