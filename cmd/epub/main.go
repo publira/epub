@@ -226,7 +226,7 @@ func runBuildFromImages(args []string) error {
 	legacyTOC := fs.Bool("legacy-toc", false, "also generate EPUB 2 toc.ncx")
 	direction := fs.String("direction", "rtl", "rtl|ltr")
 	layout := fs.String("layout", "pre-paginated", "pre-paginated|reflowable")
-	spread := fs.String("spread", "right", "left|right|center|none")
+	spread := fs.String("spread", "right", "left|right|center|none (left/right alternate automatically)")
 	globPattern := fs.String("glob", "", "glob pattern for images (e.g. ./images/*.jpg)")
 	cover := fs.String("cover", "", "path to cover image (added as first page with cover semantics)")
 	if err := fs.Parse(args); err != nil {
@@ -295,14 +295,15 @@ func runBuildFromImages(args []string) error {
 		}
 	}
 
-	for _, p := range imagePaths {
+	for i, p := range imagePaths {
 		f, size, err := openReaderAt(p)
 		if err != nil {
 			return err
 		}
 		openFiles = append(openFiles, f)
 
-		if _, _, err := doc.AddPageWithAsset(f, size, spreadNorm); err != nil {
+		pageSpread := alternateSpread(spreadNorm, i)
+		if _, _, err := doc.AddPageWithAsset(f, size, pageSpread); err != nil {
 			return err
 		}
 	}
@@ -440,6 +441,27 @@ func normalizeSpread(s string) (string, error) {
 	}
 }
 
+// alternateSpread returns the spread for a given page index.
+// When base is "right", the sequence is right, left, right, left, …
+// When base is "left", the sequence is left, right, left, right, …
+// For "center" or "none" the value is constant (no alternation).
+func alternateSpread(base string, index int) string {
+	switch base {
+	case "right":
+		if index%2 == 0 {
+			return "right"
+		}
+		return "left"
+	case "left":
+		if index%2 == 0 {
+			return "left"
+		}
+		return "right"
+	default:
+		return base
+	}
+}
+
 func printUsage() {
 	_, _ = io.WriteString(os.Stderr, `epub command demo
 
@@ -448,6 +470,6 @@ Usage:
 	epub repack       -in book.epub -out out.epub [-compliance flexible|ebpaj|kadokawa] [-legacy-toc]
   epub images       -in book.epub [-mode pages|all] [-json] [-compliance flexible|ebpaj|kadokawa]
 	epub build-images -out out.epub [-title TITLE] [-compliance flexible|ebpaj|kadokawa] [-legacy-toc] [-direction rtl|ltr] [-layout pre-paginated|reflowable]
-					[-spread left|right|center|none] [-glob './images/*.jpg'] [image1 image2 ...]
+					[-spread left|right|center|none] [-cover cover.jpg] [-glob './images/*.jpg'] [image1 image2 ...]
 `)
 }
