@@ -37,7 +37,7 @@ func validateCompliance(level ComplianceLevel, files map[string]struct{}, manife
 
 	for href, item := range manifest {
 		if _, ok := files[href]; !ok {
-			return nil, &DecodeError{Path: href, Rule: "manifest-physical-existence", Err: &ErrManifestPhysicalMissing{Href: href}}
+			return nil, &DecodeError{Path: href, Rule: "manifest-physical-existence", Err: &ManifestPhysicalMissingError{Href: href}}
 		}
 		if err := validateDirectoryRule(href); err != nil {
 			return nil, err
@@ -118,7 +118,7 @@ func validateImageSpecs(zf *zip.File, href string) error {
 		return &DecodeError{
 			Path: href,
 			Rule: "image-file-size",
-			Err: &ErrImageFileSizeTooLarge{
+			Err: &ImageFileSizeTooLargeError{
 				Href:   href,
 				Limit:  maxImageFileSize,
 				Actual: int64(zf.UncompressedSize64),
@@ -131,7 +131,7 @@ func validateImageSpecs(zf *zip.File, href string) error {
 	if err != nil {
 		return &DecodeError{Path: href, Rule: "image-open", Err: err}
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// Read all data to check pixel count and JPEG properties
 	data, err := io.ReadAll(rc)
@@ -151,7 +151,7 @@ func validateImageSpecs(zf *zip.File, href string) error {
 		return &DecodeError{
 			Path: href,
 			Rule: "image-pixel-count",
-			Err: &ErrImagePixelCountExceeded{
+			Err: &ImagePixelCountExceededError{
 				Href:   href,
 				Limit:  maxImagePixelCount,
 				Actual: pixelCount,
@@ -175,7 +175,7 @@ func validateJPEGSpecs(r io.Reader, href string) error {
 	// Progressive JPEG has SOF2 marker (0xFFC2) instead of SOF0 (0xFFC0)
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil // Skip validation if we can't read
+		return nil //nolint:nilerr // Skip validation if we can't read
 	}
 
 	if len(data) > 5 {
@@ -186,7 +186,7 @@ func validateJPEGSpecs(r io.Reader, href string) error {
 				return &DecodeError{
 					Path: href,
 					Rule: "jpeg-progressive",
-					Err:  &ErrProgressiveJPEGNotAllowed{Href: href},
+					Err:  &ProgressiveJPEGNotAllowedError{Href: href},
 				}
 			}
 		}
@@ -261,7 +261,7 @@ func preflightImageSpecs(href string, asset *Asset) []string {
 	if err != nil {
 		return nil
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	data, err := io.ReadAll(rc)
 	if err != nil {

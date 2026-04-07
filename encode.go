@@ -279,7 +279,7 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 			return err
 		}
 		if _, err := io.Copy(aw, rc); err != nil {
-			rc.Close()
+			_ = rc.Close()
 			return err
 		}
 		if err := rc.Close(); err != nil {

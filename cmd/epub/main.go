@@ -66,7 +66,7 @@ func runInspect(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	level, err := parseCompliance(*compliance)
 	if err != nil {
@@ -133,7 +133,7 @@ func runListImages(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	level, err := parseCompliance(*compliance)
 	if err != nil {
@@ -314,7 +314,7 @@ func runBuildFromImages(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	encodeOpts := make([]epub.EncodeOption, 0, 1)
 	if *legacyTOC {
@@ -332,7 +332,7 @@ func runBuildFromImages(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer verifyFile.Close()
+	defer func() { _ = verifyFile.Close() }()
 	if _, err := epub.Decode(verifyFile, verifySize, epub.WithCompliance(level)); err != nil {
 		return fmt.Errorf("generated epub failed %s compliance validation: %w", strings.ToLower(strings.TrimSpace(*compliance)), err)
 	}
@@ -358,7 +358,7 @@ func runRepack(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer inFile.Close()
+	defer func() { _ = inFile.Close() }()
 
 	level, err := parseCompliance(*compliance)
 	if err != nil {
@@ -373,7 +373,7 @@ func runRepack(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	encodeOpts := make([]epub.EncodeOption, 0, 1)
 	if *legacyTOC {
@@ -394,7 +394,7 @@ func openReaderAt(path string) (*os.File, int64, error) {
 	}
 	st, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, 0, err
 	}
 	return f, st.Size(), nil

@@ -63,9 +63,9 @@ func TestValidateCompliance_MissingPhysicalFile(t *testing.T) {
 	if de.Rule != "manifest-physical-existence" {
 		t.Fatalf("unexpected rule: %s", de.Rule)
 	}
-	var missing *ErrManifestPhysicalMissing
+	var missing *ManifestPhysicalMissingError
 	if !errors.As(err, &missing) {
-		t.Fatalf("expected ErrManifestPhysicalMissing, got: %v", err)
+		t.Fatalf("expected ManifestPhysicalMissingError, got: %v", err)
 	}
 	if missing.Href != "item/image/p-001.jpg" {
 		t.Fatalf("unexpected missing href: %s", missing.Href)

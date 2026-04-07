@@ -540,7 +540,7 @@ func (a *Asset) CalculateHash() error {
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, rc); err != nil {
@@ -577,7 +577,7 @@ func extractImageRefsFromAsset(asset *Asset) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	buf, err := io.ReadAll(rc)
 	if err != nil {

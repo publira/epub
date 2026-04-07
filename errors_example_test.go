@@ -18,7 +18,7 @@ func ExampleDecode_structuredErrors() {
 		return
 	}
 
-	var missing *ErrManifestPhysicalMissing
+	var missing *ManifestPhysicalMissingError
 	if errors.As(err, &missing) {
 		fmt.Println("missing", missing.Href)
 	}

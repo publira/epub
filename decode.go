@@ -137,7 +137,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 	for _, item := range normalizedManifest {
 		zfile, ok := filesByName[item.Href]
 		if !ok {
-			return nil, &DecodeError{Path: item.Href, Rule: "manifest-physical-existence", Err: &ErrManifestPhysicalMissing{Href: item.Href}}
+			return nil, &DecodeError{Path: item.Href, Rule: "manifest-physical-existence", Err: &ManifestPhysicalMissingError{Href: item.Href}}
 		}
 		current := zfile
 		asset := &Asset{
@@ -157,7 +157,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 	for i, ref := range pkg.Spine.Itemrefs {
 		item, ok := manifestByID[ref.IDRef]
 		if !ok {
-			return nil, &DecodeError{Path: opfPath, Rule: "spine-idref", Err: &ErrSpineUnknownIDRef{IDRef: ref.IDRef}}
+			return nil, &DecodeError{Path: opfPath, Rule: "spine-idref", Err: &SpineUnknownIDRefError{IDRef: ref.IDRef}}
 		}
 		page := &Page{Order: i, AssetID: item.ID, Href: item.Href, Spread: spreadFromProperties(ref.Properties)}
 		if doc.IsPrePaginated() && strings.Contains(item.MediaType, "xhtml") {
@@ -218,7 +218,7 @@ func validateMimeType(zr *zip.Reader) error {
 	if err != nil {
 		return &DecodeError{Path: "mimetype", Rule: "mimetype-read", Err: err}
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	buf, err := io.ReadAll(rc)
 	if err != nil {
 		return &DecodeError{Path: "mimetype", Rule: "mimetype-read", Err: err}
@@ -238,7 +238,7 @@ func readOPFPath(files map[string]*zip.File) (string, error) {
 	if err != nil {
 		return "", &DecodeError{Path: "META-INF/container.xml", Rule: "container-read", Err: err}
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	var c containerXML
 	if err := xml.NewDecoder(rc).Decode(&c); err != nil {
@@ -263,7 +263,7 @@ func readPackageXML(files map[string]*zip.File, opfPath string) (*packageXML, er
 	if err != nil {
 		return nil, &DecodeError{Path: opfPath, Rule: "opf-read", Err: err}
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	var pkg packageXML
 	if err := xml.NewDecoder(rc).Decode(&pkg); err != nil {
@@ -275,13 +275,13 @@ func readPackageXML(files map[string]*zip.File, opfPath string) (*packageXML, er
 func readViewport(files map[string]*zip.File, href string) (int, int, error) {
 	f, ok := files[href]
 	if !ok {
-		return 0, 0, &DecodeError{Path: href, Rule: "viewport-file", Err: &ErrManifestPhysicalMissing{Href: href}}
+		return 0, 0, &DecodeError{Path: href, Rule: "viewport-file", Err: &ManifestPhysicalMissingError{Href: href}}
 	}
 	rc, err := f.Open()
 	if err != nil {
 		return 0, 0, &DecodeError{Path: href, Rule: "viewport-read", Err: err}
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	buf, err := io.ReadAll(rc)
 	if err != nil {
 		return 0, 0, &DecodeError{Path: href, Rule: "viewport-read", Err: err}
@@ -470,23 +470,12 @@ func cleanOPFRef(opfDir, href string) string {
 	return strings.TrimPrefix(joined, "./")
 }
 
-func wrapPathErr(path string, rule string, err error) error {
-	if err == nil {
-		return nil
-	}
-	var de *DecodeError
-	if errors.As(err, &de) {
-		return err
-	}
-	return &DecodeError{Path: path, Rule: rule, Err: fmt.Errorf("%w", err)}
-}
-
 func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
 	if cfg.maxAssetCount > 0 && len(zr.File) > cfg.maxAssetCount {
 		return &DecodeError{
 			Path: "zip",
 			Rule: "max-asset-count",
-			Err:  &ErrMaxAssetCountExceeded{Limit: cfg.maxAssetCount, Actual: len(zr.File)},
+			Err:  &MaxAssetCountExceededError{Limit: cfg.maxAssetCount, Actual: len(zr.File)},
 		}
 	}
 
@@ -497,7 +486,7 @@ func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
 			return &DecodeError{
 				Path: f.Name,
 				Rule: "max-individual-asset-size",
-				Err:  &ErrMaxIndividualAssetSizeExceeded{Name: f.Name, Limit: cfg.maxIndividualAssetSize, Actual: size},
+				Err:  &MaxIndividualAssetSizeExceededError{Name: f.Name, Limit: cfg.maxIndividualAssetSize, Actual: size},
 			}
 		}
 
@@ -506,7 +495,7 @@ func validateResourceLimits(zr *zip.Reader, cfg decodeConfig) error {
 			return &DecodeError{
 				Path: "zip",
 				Rule: "max-total-uncompressed-size",
-				Err:  &ErrMaxTotalUncompressedSizeExceeded{Limit: cfg.maxTotalUncompressedSize, Actual: total},
+				Err:  &MaxTotalUncompressedSizeExceededError{Limit: cfg.maxTotalUncompressedSize, Actual: total},
 			}
 		}
 	}

@@ -256,9 +256,9 @@ func TestDecode_MissingManifestPhysicalFileStructuredError(t *testing.T) {
 	if de.Rule != "manifest-physical-existence" {
 		t.Fatalf("unexpected rule: %s", de.Rule)
 	}
-	var missing *ErrManifestPhysicalMissing
+	var missing *ManifestPhysicalMissingError
 	if !errors.As(err, &missing) {
-		t.Fatalf("expected ErrManifestPhysicalMissing, got: %v", err)
+		t.Fatalf("expected ManifestPhysicalMissingError, got: %v", err)
 	}
 	if missing.Href != "item/image/p-001.jpg" {
 		t.Fatalf("unexpected missing href: %s", missing.Href)
@@ -278,9 +278,9 @@ func TestDecode_UnknownSpineIDRefStructuredError(t *testing.T) {
 	if de.Rule != "spine-idref" {
 		t.Fatalf("unexpected rule: %s", de.Rule)
 	}
-	var unknown *ErrSpineUnknownIDRef
+	var unknown *SpineUnknownIDRefError
 	if !errors.As(err, &unknown) {
-		t.Fatalf("expected ErrSpineUnknownIDRef, got: %v", err)
+		t.Fatalf("expected SpineUnknownIDRefError, got: %v", err)
 	}
 	if unknown.IDRef != "missing-item" {
 		t.Fatalf("unexpected missing idref: %s", unknown.IDRef)
@@ -302,9 +302,9 @@ func TestDecode_WithMaxAssetCount_Exceeded(t *testing.T) {
 		t.Fatalf("unexpected rule: %s", de.Rule)
 	}
 
-	var exceeded *ErrMaxAssetCountExceeded
+	var exceeded *MaxAssetCountExceededError
 	if !errors.As(err, &exceeded) {
-		t.Fatalf("expected ErrMaxAssetCountExceeded, got: %v", err)
+		t.Fatalf("expected MaxAssetCountExceededError, got: %v", err)
 	}
 	if exceeded.Limit != 3 {
 		t.Fatalf("unexpected limit: %d", exceeded.Limit)
@@ -326,9 +326,9 @@ func TestDecode_WithMaxTotalUncompressedSize_Exceeded(t *testing.T) {
 		t.Fatalf("unexpected rule: %s", de.Rule)
 	}
 
-	var exceeded *ErrMaxTotalUncompressedSizeExceeded
+	var exceeded *MaxTotalUncompressedSizeExceededError
 	if !errors.As(err, &exceeded) {
-		t.Fatalf("expected ErrMaxTotalUncompressedSizeExceeded, got: %v", err)
+		t.Fatalf("expected MaxTotalUncompressedSizeExceededError, got: %v", err)
 	}
 	if exceeded.Limit != 200 {
 		t.Fatalf("unexpected limit: %d", exceeded.Limit)
@@ -350,9 +350,9 @@ func TestDecode_WithMaxIndividualAssetSize_Exceeded(t *testing.T) {
 		t.Fatalf("unexpected rule: %s", de.Rule)
 	}
 
-	var exceeded *ErrMaxIndividualAssetSizeExceeded
+	var exceeded *MaxIndividualAssetSizeExceededError
 	if !errors.As(err, &exceeded) {
-		t.Fatalf("expected ErrMaxIndividualAssetSizeExceeded, got: %v", err)
+		t.Fatalf("expected MaxIndividualAssetSizeExceededError, got: %v", err)
 	}
 	if exceeded.Limit != 200 {
 		t.Fatalf("unexpected limit: %d", exceeded.Limit)
@@ -382,9 +382,8 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 		cfg.spineIDRef = "xhtml-1"
 	}
 	manifestImageHref := strings.TrimPrefix(cfg.imageHref, "item/")
-	if !cfg.mimetypeFirst && cfg.mimetypeDeflate {
-		// allowed; this helper intentionally supports both toggles
-	}
+	// Both !mimetypeFirst && mimetypeDeflate is allowed;
+	// this helper intentionally supports both toggles.
 
 	layout := "reflowable"
 	if cfg.prePaginated {
@@ -446,7 +445,7 @@ func makeMinimalEPUB(t *testing.T, cfg minimalEPUBConfig) []byte {
 		if cfg.mimetypeDeflate {
 			method = zip.Deflate
 		}
-		w, err := zw.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: uint16(method)})
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: method})
 		if err != nil {
 			t.Fatalf("create mimetype: %v", err)
 		}

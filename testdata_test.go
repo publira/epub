@@ -34,7 +34,7 @@ func TestTestdata_DecodeAll(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			st, err := f.Stat()
 			if err != nil {
@@ -70,7 +70,7 @@ func TestTestdata_KADOKAWACompliance(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			st, err := f.Stat()
 			if err != nil {
@@ -117,7 +117,7 @@ func TestTestdata_DPFJTemplates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			st, err := f.Stat()
 			if err != nil {
@@ -154,7 +154,7 @@ func TestTestdata_CoverImageRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			st, err := f.Stat()
 			if err != nil {
@@ -220,7 +220,7 @@ func TestTestdata_KADOKAWAPreflightNoWarnings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			st, err := f.Stat()
 			if err != nil {
@@ -262,7 +262,7 @@ func TestTestdata_SizecheckPreflightWarnings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			st, err := f.Stat()
 			if err != nil {
