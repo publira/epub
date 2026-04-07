@@ -23,13 +23,35 @@ const (
 type EncodeOption func(*encodeConfig)
 
 type encodeConfig struct {
-	generateLegacyTOC bool
+	generateLegacyTOC   bool
+	preflightCompliance ComplianceLevel
+	warningCollector    func(string)
 }
 
 // WithLegacyTOC enables generation of EPUB 2 toc.ncx alongside EPUB 3 navigation.
 func WithLegacyTOC() EncodeOption {
 	return func(cfg *encodeConfig) {
 		cfg.generateLegacyTOC = true
+	}
+}
+
+// WithEncodePreflightCompliance enables preflight compliance checks before
+// writing the EPUB ZIP.  Only strict profiles (LevelEBPAJ, LevelKADOKAWA) run
+// actual checks; LevelFlexible is accepted but performs no validation.
+// Detected violations are delivered as non-fatal warnings through the collector
+// registered via [WithEncodeWarningCollector].
+func WithEncodePreflightCompliance(level ComplianceLevel) EncodeOption {
+	return func(cfg *encodeConfig) {
+		cfg.preflightCompliance = level
+	}
+}
+
+// WithEncodeWarningCollector registers a callback that receives each preflight
+// warning string.  The callback is invoked synchronously before ZIP writing
+// begins.  If no collector is set, preflight warnings are silently discarded.
+func WithEncodeWarningCollector(fn func(string)) EncodeOption {
+	return func(cfg *encodeConfig) {
+		cfg.warningCollector = fn
 	}
 }
 
@@ -42,6 +64,16 @@ func Encode(w io.Writer, doc *Document, opts ...EncodeOption) error {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+
+	if cfg.preflightCompliance != LevelFlexible {
+		warnings := preflightEncode(cfg.preflightCompliance, doc)
+		if cfg.warningCollector != nil {
+			for _, w := range warnings {
+				cfg.warningCollector(w)
+			}
+		}
+	}
+
 	zw := zip.NewWriter(w)
 
 	if err := writeMimetype(zw); err != nil {

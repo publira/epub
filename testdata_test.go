@@ -200,3 +200,93 @@ func TestTestdata_CoverImageRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestTestdata_KADOKAWAPreflightNoWarnings(t *testing.T) {
+	paths := testdataEPUBs(t)
+	if len(paths) == 0 {
+		t.Skip("no epub files in testdata/ (see testdata/README.md)")
+	}
+	for _, p := range paths {
+		base := filepath.Base(p)
+		if !strings.Contains(base, "kadokawa") {
+			continue
+		}
+		// sizecheck EPUBs intentionally violate constraints; tested separately.
+		if strings.Contains(base, "sizecheck") {
+			continue
+		}
+		t.Run(base, func(t *testing.T) {
+			f, err := os.Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+
+			st, err := f.Stat()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			doc, err := epub.Decode(f, st.Size(), epub.WithCompliance(epub.LevelKADOKAWA))
+			if err != nil {
+				t.Fatalf("Decode failed: %v", err)
+			}
+
+			var warnings []string
+			var buf bytes.Buffer
+			if err := epub.Encode(&buf, doc,
+				epub.WithEncodePreflightCompliance(epub.LevelKADOKAWA),
+				epub.WithEncodeWarningCollector(func(w string) { warnings = append(warnings, w) }),
+			); err != nil {
+				t.Fatalf("Encode failed: %v", err)
+			}
+			if len(warnings) != 0 {
+				t.Errorf("expected no preflight warnings for compliant EPUB, got: %v", warnings)
+			}
+		})
+	}
+}
+
+func TestTestdata_SizecheckPreflightWarnings(t *testing.T) {
+	paths := testdataEPUBs(t)
+	if len(paths) == 0 {
+		t.Skip("no epub files in testdata/ (see testdata/README.md)")
+	}
+	for _, p := range paths {
+		base := filepath.Base(p)
+		if !strings.Contains(base, "sizecheck") {
+			continue
+		}
+		t.Run(base, func(t *testing.T) {
+			f, err := os.Open(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+
+			st, err := f.Stat()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Decode without compliance to get the Document.
+			doc, err := epub.Decode(f, st.Size())
+			if err != nil {
+				t.Fatalf("Decode failed: %v", err)
+			}
+
+			var warnings []string
+			var buf bytes.Buffer
+			if err := epub.Encode(&buf, doc,
+				epub.WithEncodePreflightCompliance(epub.LevelKADOKAWA),
+				epub.WithEncodeWarningCollector(func(w string) { warnings = append(warnings, w) }),
+			); err != nil {
+				t.Fatalf("Encode failed: %v", err)
+			}
+			if len(warnings) == 0 {
+				t.Fatal("expected preflight warnings for sizecheck EPUB, got none")
+			}
+			t.Logf("preflight warnings (%d): %v", len(warnings), warnings)
+		})
+	}
+}

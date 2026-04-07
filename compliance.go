@@ -4,6 +4,7 @@ package epub
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"image"
 	"io"
@@ -192,4 +193,108 @@ func validateJPEGSpecs(r io.Reader, href string) error {
 	}
 
 	return nil
+}
+
+// preflightEncode runs lightweight compliance checks against a Document before
+// encoding.  It returns non-fatal warning strings; it never returns errors.
+// Only strict profiles (LevelEBPAJ, LevelKADOKAWA) produce meaningful output.
+func preflightEncode(level ComplianceLevel, doc *Document) []string {
+	if level == LevelFlexible || doc == nil {
+		return nil
+	}
+
+	var warnings []string
+
+	for href, asset := range doc.Assets {
+		if asset == nil {
+			continue
+		}
+		mt := strings.ToLower(strings.TrimSpace(asset.MimeType))
+
+		// Directory layout check.
+		dir := path.Dir(href)
+		if dir == "." || (!strings.HasPrefix(href, "item/xhtml/") &&
+			!strings.HasPrefix(href, "item/image/") &&
+			!strings.HasPrefix(href, "item/style/") &&
+			dir != "item") {
+			warnings = append(warnings, fmt.Sprintf("asset %q does not follow the expected directory layout", href))
+		}
+
+		if strings.HasPrefix(mt, "image/") {
+			// Image naming.
+			switch level {
+			case LevelEBPAJ:
+				if !imageNamePatternEBPAJ.MatchString(href) {
+					warnings = append(warnings, fmt.Sprintf("image %q does not match EBPAJ naming pattern", href))
+				}
+			case LevelKADOKAWA:
+				if !imageNamePatternKADOKAWA.MatchString(href) {
+					warnings = append(warnings, fmt.Sprintf("image %q does not match KADOKAWA naming pattern", href))
+				}
+			}
+
+			// File size.
+			if asset.Size > uint64(maxImageFileSize) {
+				warnings = append(warnings, fmt.Sprintf("image %q file size %s exceeds %s limit",
+					href, formatBytes(int64(asset.Size)), formatBytes(maxImageFileSize)))
+			}
+
+			// Pixel count and progressive JPEG (requires opening asset).
+			if asset.Open != nil {
+				if w := preflightImageSpecs(href, asset); len(w) > 0 {
+					warnings = append(warnings, w...)
+				}
+			}
+		} else if strings.Contains(mt, "xhtml") {
+			if asset.Size > uint64(maxXHTMLFileSize) {
+				warnings = append(warnings, fmt.Sprintf("XHTML file %q size %s exceeds %s, may cause RS performance issues",
+					href, formatBytes(int64(asset.Size)), formatBytes(int64(maxXHTMLFileSize))))
+			}
+		}
+	}
+	return warnings
+}
+
+// preflightImageSpecs opens an image asset and checks pixel count and JPEG encoding.
+func preflightImageSpecs(href string, asset *Asset) []string {
+	rc, err := asset.Open()
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil
+	}
+
+	var warnings []string
+
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil
+	}
+	pixelCount := int64(cfg.Width) * int64(cfg.Height)
+	if pixelCount > maxImagePixelCount {
+		warnings = append(warnings, fmt.Sprintf("image %q pixel count %d exceeds %d limit",
+			href, pixelCount, maxImagePixelCount))
+	}
+
+	if format == "jpeg" {
+		if isProgressiveJPEG(data) {
+			warnings = append(warnings, fmt.Sprintf("image %q is a progressive JPEG, which is not allowed", href))
+		}
+	}
+
+	return warnings
+}
+
+// isProgressiveJPEG detects progressive JPEG by looking for SOF2 marker (0xFFC2).
+func isProgressiveJPEG(data []byte) bool {
+	for i := 0; i < len(data)-1; i++ {
+		if data[i] == 0xFF && data[i+1] == 0xC2 {
+			return true
+		}
+	}
+	return false
 }

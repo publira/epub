@@ -519,3 +519,200 @@ func TestSetCover(t *testing.T) {
 		t.Fatal("no page with PageTypeCover found after decode")
 	}
 }
+
+func TestEncode_WithPreflightCompliance_NoWarningsForValidDoc(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Valid"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var warnings []string
+	var out bytes.Buffer
+	err := Encode(&out, doc,
+		WithEncodePreflightCompliance(LevelKADOKAWA),
+		WithEncodeWarningCollector(func(w string) { warnings = append(warnings, w) }),
+	)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("expected no warnings, got: %v", warnings)
+	}
+}
+
+func TestEncode_WithPreflightCompliance_ImageSizeWarning(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Large Image"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Assets: map[string]*Asset{
+			"item/image/p-001.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Size:     5 * 1024 * 1024, // 5MB, exceeds 4MB limit
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake"))), nil
+				},
+			},
+		},
+		Pages: []*Page{{Order: 0, AssetID: "p-001", Spread: "right"}},
+	}
+
+	var warnings []string
+	var out bytes.Buffer
+	err := Encode(&out, doc,
+		WithEncodePreflightCompliance(LevelEBPAJ),
+		WithEncodeWarningCollector(func(w string) { warnings = append(warnings, w) }),
+	)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "file size") && strings.Contains(w, "exceeds") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected file-size warning, got: %v", warnings)
+	}
+}
+
+func TestEncode_WithPreflightCompliance_DirectoryLayoutWarning(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Bad Layout"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Assets: map[string]*Asset{
+			"baddir/p-001.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Size:     100,
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake"))), nil
+				},
+			},
+		},
+		Pages: []*Page{{Order: 0, AssetID: "p-001", Spread: "right"}},
+	}
+
+	var warnings []string
+	var out bytes.Buffer
+	err := Encode(&out, doc,
+		WithEncodePreflightCompliance(LevelKADOKAWA),
+		WithEncodeWarningCollector(func(w string) { warnings = append(warnings, w) }),
+	)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "directory layout") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected directory-layout warning, got: %v", warnings)
+	}
+}
+
+func TestEncode_WithPreflightCompliance_NamingWarning(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Bad Naming"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Assets: map[string]*Asset{
+			"item/image/BADNAME.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Size:     100,
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake"))), nil
+				},
+			},
+		},
+		Pages: []*Page{{Order: 0, AssetID: "p-001", Spread: "right"}},
+	}
+
+	var warnings []string
+	var out bytes.Buffer
+	err := Encode(&out, doc,
+		WithEncodePreflightCompliance(LevelEBPAJ),
+		WithEncodeWarningCollector(func(w string) { warnings = append(warnings, w) }),
+	)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "naming pattern") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected naming-pattern warning, got: %v", warnings)
+	}
+}
+
+func TestEncode_WithPreflightCompliance_FlexibleNoWarnings(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Flexible"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Assets: map[string]*Asset{
+			"baddir/BADNAME.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Size:     100,
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake"))), nil
+				},
+			},
+		},
+		Pages: []*Page{{Order: 0, AssetID: "p-001", Spread: "right"}},
+	}
+
+	var warnings []string
+	var out bytes.Buffer
+	err := Encode(&out, doc,
+		WithEncodePreflightCompliance(LevelFlexible),
+		WithEncodeWarningCollector(func(w string) { warnings = append(warnings, w) }),
+	)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("flexible mode should produce no warnings, got: %v", warnings)
+	}
+}
+
+func TestEncode_WithPreflightCompliance_NoCollectorDiscards(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "No Collector"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Assets: map[string]*Asset{
+			"baddir/BADNAME.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Size:     100,
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake"))), nil
+				},
+			},
+		},
+		Pages: []*Page{{Order: 0, AssetID: "p-001", Spread: "right"}},
+	}
+
+	var out bytes.Buffer
+	// Preflight enabled but no collector — should not panic.
+	err := Encode(&out, doc, WithEncodePreflightCompliance(LevelKADOKAWA))
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+}
