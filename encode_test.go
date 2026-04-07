@@ -716,3 +716,72 @@ func TestEncode_WithPreflightCompliance_NoCollectorDiscards(t *testing.T) {
 		t.Fatalf("Encode failed: %v", err)
 	}
 }
+
+func TestEncode_LanguageDefault(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Lang Default"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opfContent, `<dc:language>en</dc:language>`) {
+		t.Fatalf("dc:language default missing:\n%s", opfContent)
+	}
+}
+
+func TestEncode_LanguageExplicit(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Lang Explicit", Language: "ja"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opfContent, `<dc:language>ja</dc:language>`) {
+		t.Fatalf("dc:language explicit missing:\n%s", opfContent)
+	}
+}
+
+func TestEncodeDecode_LanguageRoundTrip(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Lang RoundTrip", Language: "zh-Hans"},
+		Direction: "ltr",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoded, err := Decode(bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if decoded.Metadata.Language != "zh-Hans" {
+		t.Fatalf("Language mismatch: got %q, want %q", decoded.Metadata.Language, "zh-Hans")
+	}
+}

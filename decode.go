@@ -103,6 +103,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 
 	title, titleID := primaryDCValue(pkg.Metadata.Titles)
 	identifier, identifierID := primaryIdentifier(pkg.Metadata.Identifiers, pkg.UniqueIdentifier)
+	language, _ := primaryDCValue(pkg.Metadata.Languages)
 	fileAsByRefines := parseFileAsByRefines(pkg.Metadata.Meta)
 
 	titleFileAs := ""
@@ -116,6 +117,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 			TitleFileAs:          titleFileAs,
 			Identifier:           identifier,
 			IdentifierID:         identifierID,
+			Language:             language,
 			Creators:             parseCreators(pkg.Metadata.Creators, fileAsByRefines),
 			CoverAssetID:         parseCoverAssetID(normalizedManifest, pkg.Metadata.Meta),
 			RenditionSpread:      parseMetaValueByProperty(pkg.Metadata.Meta, "rendition:spread"),

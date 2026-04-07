@@ -166,6 +166,7 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 
 	titles := []dcElement{{ID: "title", Value: metadata.Title}}
 	identifiers := []dcElement{{ID: identifierID, Value: identifier}}
+	languages := []dcElement{{Value: metadata.Language}}
 
 	var creators []dcElement
 	var metaEntries []metadataMeta
@@ -213,6 +214,7 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		Metadata: packageMetadata{
 			Titles:      titles,
 			Identifiers: identifiers,
+			Languages:   languages,
 			Creators:    creators,
 			Meta:        metaEntries,
 		},

@@ -78,6 +78,7 @@ func runInspect(args []string) error {
 	}
 
 	fmt.Printf("Title: %s\n", doc.Metadata.Title)
+	fmt.Printf("Language: %s\n", doc.Metadata.Language)
 	fmt.Printf("Direction: %s\n", doc.Direction)
 	fmt.Printf("Layout: %s\n", doc.Layout.String())
 	fmt.Printf("Pages: %d\n", len(doc.Pages))
@@ -229,6 +230,7 @@ func runBuildFromImages(args []string) error {
 	spread := fs.String("spread", "right", "left|right|center|none (left/right alternate automatically)")
 	globPattern := fs.String("glob", "", "glob pattern for images (e.g. ./images/*.jpg)")
 	cover := fs.String("cover", "", "path to cover image (added as first page with cover semantics)")
+	language := fs.String("language", "en", "dc:language value (e.g. ja, en, zh-Hans)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -269,7 +271,7 @@ func runBuildFromImages(args []string) error {
 	}
 
 	doc := &epub.Document{
-		Metadata:  epub.Metadata{Title: strings.TrimSpace(*title)},
+		Metadata:  epub.Metadata{Title: strings.TrimSpace(*title), Language: strings.TrimSpace(*language)},
 		Direction: directionNorm,
 		Layout:    layoutType,
 		Pages:     make([]*epub.Page, 0, len(imagePaths)),
@@ -469,7 +471,7 @@ Usage:
   epub inspect      -in book.epub [-compliance flexible|ebpaj|kadokawa]
 	epub repack       -in book.epub -out out.epub [-compliance flexible|ebpaj|kadokawa] [-legacy-toc]
   epub images       -in book.epub [-mode pages|all] [-json] [-compliance flexible|ebpaj|kadokawa]
-	epub build-images -out out.epub [-title TITLE] [-compliance flexible|ebpaj|kadokawa] [-legacy-toc] [-direction rtl|ltr] [-layout pre-paginated|reflowable]
+	epub build-images -out out.epub [-title TITLE] [-language LANG] [-compliance flexible|ebpaj|kadokawa] [-legacy-toc] [-direction rtl|ltr] [-layout pre-paginated|reflowable]
 					[-spread left|right|center|none] [-cover cover.jpg] [-glob './images/*.jpg'] [image1 image2 ...]
 `)
 }

@@ -44,6 +44,7 @@ type Metadata struct {
 	TitleFileAs          string
 	Identifier           string
 	IdentifierID         string
+	Language             string
 	Creators             []Creator
 	CoverAssetID         string
 	RenditionSpread      string
@@ -68,6 +69,9 @@ func (d *Document) effectiveMetadata() Metadata {
 	}
 	if strings.TrimSpace(m.Identifier) == "" {
 		m.Identifier = d.Identifier
+	}
+	if strings.TrimSpace(m.Language) == "" {
+		m.Language = "en"
 	}
 	return m
 }

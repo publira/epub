@@ -69,6 +69,7 @@ func (p packageXML) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 type packageMetadata struct {
 	Titles      []dcElement    `xml:"title"`
 	Identifiers []dcElement    `xml:"identifier"`
+	Languages   []dcElement    `xml:"language"`
 	Creators    []dcElement    `xml:"creator"`
 	Meta        []metadataMeta `xml:"meta"`
 }
@@ -88,6 +89,11 @@ func (m packageMetadata) MarshalXML(e *xml.Encoder, start xml.StartElement) erro
 	}
 	for _, id := range m.Identifiers {
 		if err := encodeDCElement(e, "dc:identifier", id); err != nil {
+			return err
+		}
+	}
+	for _, l := range m.Languages {
+		if err := encodeDCElement(e, "dc:language", l); err != nil {
 			return err
 		}
 	}
