@@ -122,6 +122,7 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 			CoverAssetID:         parseCoverAssetID(normalizedManifest, pkg.Metadata.Meta),
 			RenditionSpread:      parseMetaValueByProperty(pkg.Metadata.Meta, "rendition:spread"),
 			RenditionOrientation: parseMetaValueByProperty(pkg.Metadata.Meta, "rendition:orientation"),
+			BookType:             parseMetaContentByName(pkg.Metadata.Meta, "book-type"),
 			EBPAJGuideVersion:    parseMetaValueByProperty(pkg.Metadata.Meta, "ebpaj:guide-version"),
 			KADOKAWAVersion:      parseMetaValueByProperty(pkg.Metadata.Meta, "kadokawa:version"),
 		},
@@ -378,6 +379,17 @@ func parseMetaValueByProperty(meta []metadataMeta, property string) string {
 				v = strings.TrimSpace(m.Content)
 			}
 			return v
+		}
+	}
+	return ""
+}
+
+func parseMetaContentByName(meta []metadataMeta, name string) string {
+	for _, m := range meta {
+		if strings.EqualFold(strings.TrimSpace(m.Name), name) {
+			if v := strings.TrimSpace(m.Content); v != "" {
+				return v
+			}
 		}
 	}
 	return ""

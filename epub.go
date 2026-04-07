@@ -49,6 +49,7 @@ type Metadata struct {
 	CoverAssetID         string
 	RenditionSpread      string
 	RenditionOrientation string
+	BookType             string
 	EBPAJGuideVersion    string
 	KADOKAWAVersion      string
 }

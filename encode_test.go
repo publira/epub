@@ -788,7 +788,7 @@ func TestEncodeDecode_LanguageRoundTrip(t *testing.T) {
 
 func TestEncode_KindleMetadata_PrePaginated(t *testing.T) {
 	doc := &Document{
-		Metadata:  Metadata{Title: "Fixed Layout"},
+		Metadata:  Metadata{Title: "Fixed Layout", BookType: "comic"},
 		Direction: "rtl",
 		Layout:    LayoutPrePaginated,
 		Pages: []*Page{
@@ -821,7 +821,7 @@ func TestEncode_KindleMetadata_PrePaginated(t *testing.T) {
 
 func TestEncode_KindleMetadata_SkipsCoverPage(t *testing.T) {
 	doc := &Document{
-		Metadata:  Metadata{Title: "Cover Skip"},
+		Metadata:  Metadata{Title: "Cover Skip", BookType: "comic"},
 		Direction: "rtl",
 		Layout:    LayoutPrePaginated,
 		Pages: []*Page{
@@ -860,7 +860,7 @@ func TestEncode_KindleMetadata_SkipsCoverPage(t *testing.T) {
 
 func TestEncode_KindleMetadata_FallbackToCover(t *testing.T) {
 	doc := &Document{
-		Metadata:  Metadata{Title: "Cover Only"},
+		Metadata:  Metadata{Title: "Cover Only", BookType: "comic"},
 		Direction: "rtl",
 		Layout:    LayoutPrePaginated,
 		Pages: []*Page{
@@ -919,5 +919,68 @@ func TestEncode_KindleMetadata_Reflowable_NoInjection(t *testing.T) {
 	}
 	if strings.Contains(opf, `book-type`) {
 		t.Fatalf("reflowable should not have book-type:\n%s", opf)
+	}
+}
+
+func TestEncode_KindleMetadata_NoBookTypeWhenEmpty(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "No BookType"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Pages: []*Page{
+			{Order: 0, AssetID: "p-001", Width: 1080, Height: 1920, Spread: "right"},
+		},
+		Assets: map[string]*Asset{
+			"item/image/p-001.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake-image"))), nil
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opf := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opf, `name="original-resolution"`) {
+		t.Fatalf("original-resolution should still be present:\n%s", opf)
+	}
+	if strings.Contains(opf, `book-type`) {
+		t.Fatalf("book-type should not be present when BookType is empty:\n%s", opf)
+	}
+}
+
+func TestEncode_KindleMetadata_BookTypeMagazine(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Magazine", BookType: "magazine"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+		Pages: []*Page{
+			{Order: 0, AssetID: "p-001", Width: 1080, Height: 1920, Spread: "right"},
+		},
+		Assets: map[string]*Asset{
+			"item/image/p-001.jpg": {
+				ID:       "p-001",
+				MimeType: "image/jpeg",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader([]byte("fake-image"))), nil
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opf := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opf, `name="book-type" content="magazine"`) {
+		t.Fatalf("book-type should be magazine:\n%s", opf)
 	}
 }
