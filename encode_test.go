@@ -210,6 +210,92 @@ func TestEncode_Issue4AdvancedMetadata(t *testing.T) {
 	}
 }
 
+func TestEncode_RenditionSpreadAndOrientation_Defaults(t *testing.T) {
+	doc := &Document{
+		Metadata:  Metadata{Title: "Spread Test"},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opfContent, `<meta property="rendition:spread">landscape</meta>`) {
+		t.Fatalf("rendition:spread default missing:\n%s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta property="rendition:orientation">auto</meta>`) {
+		t.Fatalf("rendition:orientation default missing:\n%s", opfContent)
+	}
+}
+
+func TestEncode_RenditionSpreadAndOrientation_Explicit(t *testing.T) {
+	doc := &Document{
+		Metadata: Metadata{
+			Title:                "Spread Explicit",
+			RenditionSpread:      "none",
+			RenditionOrientation: "portrait",
+		},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	opfContent := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opfContent, `<meta property="rendition:spread">none</meta>`) {
+		t.Fatalf("rendition:spread explicit missing:\n%s", opfContent)
+	}
+	if !strings.Contains(opfContent, `<meta property="rendition:orientation">portrait</meta>`) {
+		t.Fatalf("rendition:orientation explicit missing:\n%s", opfContent)
+	}
+}
+
+func TestEncodeDecode_RenditionSpreadAndOrientation_RoundTrip(t *testing.T) {
+	doc := &Document{
+		Metadata: Metadata{
+			Title:                "RoundTrip Spread",
+			RenditionSpread:      "both",
+			RenditionOrientation: "landscape",
+		},
+		Direction: "rtl",
+		Layout:    LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+	if _, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right"); err != nil {
+		t.Fatalf("AddPageWithAsset failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoded, err := Decode(bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	if decoded.Metadata.RenditionSpread != "both" {
+		t.Fatalf("unexpected rendition:spread: %s", decoded.Metadata.RenditionSpread)
+	}
+	if decoded.Metadata.RenditionOrientation != "landscape" {
+		t.Fatalf("unexpected rendition:orientation: %s", decoded.Metadata.RenditionOrientation)
+	}
+}
+
 func readZipEntry(t *testing.T, data []byte, name string) string {
 	t.Helper()
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))

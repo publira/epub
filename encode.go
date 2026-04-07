@@ -174,8 +174,13 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 		metadataEntries = append(metadataEntries, string(coverMetaBytes))
 	}
 
+	rSpread := normalizeRenditionSpread(metadata.RenditionSpread)
+	rOrientation := normalizeRenditionOrientation(metadata.RenditionOrientation)
+
 	metadataEntries = append(metadataEntries,
 		fmt.Sprintf(`<meta property="rendition:layout">%s</meta>`, xmlEscape(rLayout)),
+		fmt.Sprintf(`<meta property="rendition:spread">%s</meta>`, xmlEscape(rSpread)),
+		fmt.Sprintf(`<meta property="rendition:orientation">%s</meta>`, xmlEscape(rOrientation)),
 		fmt.Sprintf(`<meta property="dcterms:modified">%s</meta>`, xmlEscape(formatW3CTime(time.Now()))),
 		fmt.Sprintf(`<meta property="ebpaj:guide-version">%s</meta>`, xmlEscape(normalizeSpecVersion(metadata.EBPAJGuideVersion, defaultEBPAJGuideVersion))),
 		fmt.Sprintf(`<meta property="kadokawa:version">%s</meta>`, xmlEscape(normalizeSpecVersion(metadata.KADOKAWAVersion, defaultKADOKAWAVersion))),
@@ -290,6 +295,26 @@ func normalizeSpecVersion(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func normalizeRenditionSpread(v string) string {
+	v = strings.TrimSpace(strings.ToLower(v))
+	switch v {
+	case "none", "landscape", "portrait", "both", "auto":
+		return v
+	default:
+		return "landscape"
+	}
+}
+
+func normalizeRenditionOrientation(v string) string {
+	v = strings.TrimSpace(strings.ToLower(v))
+	switch v {
+	case "landscape", "portrait", "auto":
+		return v
+	default:
+		return "auto"
+	}
 }
 
 func formatW3CTime(t time.Time) string {

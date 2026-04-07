@@ -40,14 +40,16 @@ type Document struct {
 
 // Metadata represents OPF metadata values used by this package.
 type Metadata struct {
-	Title             string
-	TitleFileAs       string
-	Identifier        string
-	IdentifierID      string
-	Creators          []Creator
-	CoverAssetID      string
-	EBPAJGuideVersion string
-	KADOKAWAVersion   string
+	Title                string
+	TitleFileAs          string
+	Identifier           string
+	IdentifierID         string
+	Creators             []Creator
+	CoverAssetID         string
+	RenditionSpread      string
+	RenditionOrientation string
+	EBPAJGuideVersion    string
+	KADOKAWAVersion      string
 }
 
 // Creator represents a dc:creator entry with optional phonetic sort key.
