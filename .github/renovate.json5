@@ -1,5 +1,4 @@
 {
-  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
-  extends: ['config:best-practices'],
-  postUpdateOptions: ['gomodTidy'],
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["github>publira/.github//renovate.json5"],
 }
