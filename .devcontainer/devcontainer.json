@@ -1,6 +1,6 @@
 {
   "name": "epub",
-  "image": "mcr.microsoft.com/devcontainers/go:2.1.1-1.26-bookworm@sha256:4da2693c134c65e87f73fcebcd4b3c0e8a9b208384fd8c1f84c4414b5cd06c20",
+  "image": "mcr.microsoft.com/devcontainers/go:2.1.6-1.26-bookworm@sha256:1a3df7e2f24378acfb7c1048b7b018813112f280f011bad4aa9b02fff600481e",
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1.1.0": {
       "version": "2.88.1"
