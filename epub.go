@@ -447,10 +447,12 @@ type Page struct {
 	Order   int
 	AssetID string
 	Href    string
-	Width   int
-	Height  int
-	Spread  string   // "left", "right", "center", "none".
-	Type    PageType // Semantic role of the page.
+	// Title is the optional label used by EPUB navigation documents.
+	Title  string
+	Width  int
+	Height int
+	Spread string   // "left", "right", "center", "none".
+	Type   PageType // Semantic role of the page.
 }
 
 // Asset points to a binary object referenced from EPUB manifest.

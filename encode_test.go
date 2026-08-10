@@ -159,6 +159,48 @@ func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
 	}
 }
 
+func TestEncode_UsesPageTitlesInNavigation(t *testing.T) {
+	doc := &Document{
+		Metadata: Metadata{Title: "Navigation titles", Identifier: "titles-1"},
+		Layout:   LayoutReflowable,
+		Pages: []*Page{
+			{Order: 0, AssetID: "chapter-1", Href: "item/xhtml/chapter-1.xhtml", Title: "Chapter & One"},
+			{Order: 1, AssetID: "chapter-2", Href: "item/xhtml/chapter-2.xhtml", Title: "   "},
+		},
+		Assets: map[string]*Asset{
+			"item/xhtml/chapter-1.xhtml": {
+				ID:       "chapter-1",
+				MimeType: "application/xhtml+xml",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader("<html/>")), nil
+				},
+			},
+			"item/xhtml/chapter-2.xhtml": {
+				ID:       "chapter-2",
+				MimeType: "application/xhtml+xml",
+				Open: func() (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader("<html/>")), nil
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc, WithLegacyTOC()); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	for _, name := range []string{"item/nav.xhtml", "item/toc.ncx"} {
+		content := readZipEntry(t, out.Bytes(), name)
+		if !strings.Contains(content, "Chapter &amp; One") {
+			t.Fatalf("%s does not contain escaped page title: %s", name, content)
+		}
+		if !strings.Contains(content, "Page 2") {
+			t.Fatalf("%s does not contain fallback page title: %s", name, content)
+		}
+	}
+}
+
 func TestEncode_Issue4AdvancedMetadata(t *testing.T) {
 	doc := &Document{
 		Metadata: Metadata{

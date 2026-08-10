@@ -446,6 +446,15 @@ func resolveCoverPageHref(doc *Document, coverAssetID string) string {
 	return ""
 }
 
+func pageNavigationTitle(page *Page, ordinal int) string {
+	if page != nil {
+		if title := strings.TrimSpace(page.Title); title != "" {
+			return title
+		}
+	}
+	return fmt.Sprintf("Page %d", ordinal)
+}
+
 func buildNavigationDocument(doc *Document, coverAssetID string) (string, error) {
 	tocItems := make([]navListItem, 0, len(doc.Pages))
 	for i, pg := range doc.Pages {
@@ -465,7 +474,7 @@ func buildNavigationDocument(doc *Document, coverAssetID string) (string, error)
 			href = "#"
 		}
 		tocItems = append(tocItems, navListItem{
-			Anchor: navLandmarkAnchor{Href: href, Text: fmt.Sprintf("Page %d", i+1)},
+			Anchor: navLandmarkAnchor{Href: href, Text: pageNavigationTitle(pg, i+1)},
 		})
 	}
 	if len(tocItems) == 0 {
@@ -537,7 +546,7 @@ func buildLegacyNCX(doc *Document, identifier string) (string, error) {
 		navPoints = append(navPoints, ncxNavPoint{
 			ID:        fmt.Sprintf("navPoint-%d", i+1),
 			PlayOrder: i + 1,
-			NavLabel:  ncxNavLabel{Text: fmt.Sprintf("Page %d", i+1)},
+			NavLabel:  ncxNavLabel{Text: pageNavigationTitle(pg, i+1)},
 			Content:   ncxContent{Src: href},
 		})
 	}
