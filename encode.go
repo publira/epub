@@ -567,7 +567,9 @@ func buildLandmarkItems(doc *Document, coverAssetID string) []navListItem {
 				break
 			}
 		}
-		add(string(PageTypeBodymatter), bodyHref, "Body")
+		if bodyHref != "" {
+			add(string(PageTypeBodymatter), bodyHref, "Body")
+		}
 	}
 
 	return items

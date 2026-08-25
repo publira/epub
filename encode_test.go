@@ -186,6 +186,24 @@ func TestEncode_StructuralSemanticsLandmarks(t *testing.T) {
 	}
 }
 
+func TestEncode_CoverOnlyOmitsBodymatterLandmark(t *testing.T) {
+	doc := &Document{Metadata: Metadata{Title: "Cover only"}, Layout: LayoutPrePaginated}
+	png := testPNGBytes()
+	if _, _, err := doc.SetCover(bytes.NewReader(png), int64(len(png))); err != nil {
+		t.Fatalf("SetCover failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	nav := readZipEntry(t, out.Bytes(), "item/nav.xhtml")
+	if strings.Contains(nav, `epub:type="bodymatter"`) {
+		t.Fatalf("cover-only document must not contain a bodymatter landmark:\n%s", nav)
+	}
+}
+
 func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
 	doc := &Document{
 		Metadata:  Metadata{Title: "Legacy TOC", Identifier: "E-2026-0002"},
