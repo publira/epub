@@ -95,8 +95,14 @@ func TestAddPageWithAssetGeneratesXHTMLWrapper(t *testing.T) {
 	if !strings.Contains(xhtml, `name="viewport" content="width=1, height=1"`) {
 		t.Fatalf("viewport meta is missing: %s", xhtml)
 	}
-	if !strings.Contains(xhtml, `img src="../image/p-001.png"`) {
-		t.Fatalf("image ref is missing: %s", xhtml)
+	if !strings.Contains(xhtml, `<svg xmlns="http://www.w3.org/2000/svg"`) {
+		t.Fatalf("SVG wrapper is missing: %s", xhtml)
+	}
+	if !strings.Contains(xhtml, `viewBox="0 0 1 1"`) {
+		t.Fatalf("SVG viewBox is missing: %s", xhtml)
+	}
+	if !strings.Contains(xhtml, `xlink:href="../image/p-001.png"`) {
+		t.Fatalf("SVG image ref is missing: %s", xhtml)
 	}
 }
 

@@ -172,6 +172,17 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 		doc.Pages = append(doc.Pages, page)
 	}
 
+	// Preserve page structural semantics from the navigation document's
+	// landmarks, when one is available. The package document does not carry
+	// these semantics directly.
+	if landmarkTypes, err := parseNavigationLandmarkTypes(normalizedManifest, filesByName); err == nil {
+		for _, pg := range doc.Pages {
+			if pageType, ok := landmarkTypes[pg.Href]; ok {
+				pg.Type = pageType
+			}
+		}
+	}
+
 	// Mark cover page based on CoverAssetID.
 	if coverID := doc.Metadata.CoverAssetID; coverID != "" {
 		wrapperID := "xhtml-" + coverID
@@ -228,6 +239,82 @@ func Decode(r io.ReaderAt, size int64, opts ...DecodeOption) (*Document, error) 
 	doc.Warnings = warnings
 
 	return doc, nil
+}
+
+func parseNavigationLandmarkTypes(manifest []manifestItem, filesByName map[string]*zip.File) (map[string]PageType, error) {
+	for _, item := range manifest {
+		isNav := false
+		for _, property := range strings.Fields(item.Properties) {
+			if strings.EqualFold(property, "nav") {
+				isNav = true
+				break
+			}
+		}
+		if !isNav {
+			continue
+		}
+		file, ok := filesByName[item.Href]
+		if !ok {
+			return nil, ErrAssetNotFound
+		}
+		return parseLandmarkTypes(file, item.Href)
+	}
+	return nil, nil
+}
+
+func parseLandmarkTypes(file *zip.File, navHref string) (map[string]PageType, error) {
+	rc, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+
+	decoder := xml.NewDecoder(rc)
+	types := make(map[string]PageType)
+	landmarkDepth := 0
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return types, nil
+			}
+			return nil, err
+		}
+
+		switch node := token.(type) {
+		case xml.StartElement:
+			if strings.EqualFold(node.Name.Local, "nav") {
+				if landmarkDepth > 0 {
+					landmarkDepth++
+				} else if strings.EqualFold(xmlAttrValue(node.Attr, "type"), "landmarks") {
+					landmarkDepth = 1
+				}
+				continue
+			}
+			if landmarkDepth == 0 || !strings.EqualFold(node.Name.Local, "a") {
+				continue
+			}
+			semantic := strings.TrimSpace(xmlAttrValue(node.Attr, "type"))
+			href := strings.TrimSpace(xmlAttrValue(node.Attr, "href"))
+			if semantic == "" || !isLocalAssetRef(href) {
+				continue
+			}
+			if fragment := strings.IndexByte(href, '#'); fragment >= 0 {
+				href = href[:fragment]
+			}
+			if href == "" {
+				continue
+			}
+			resolved := cleanOPFRef(path.Dir(navHref), href)
+			if _, exists := types[resolved]; !exists {
+				types[resolved] = PageType(semantic)
+			}
+		case xml.EndElement:
+			if landmarkDepth > 0 && strings.EqualFold(node.Name.Local, "nav") {
+				landmarkDepth--
+			}
+		}
+	}
 }
 
 func validateMimeType(zr *zip.Reader) error {
