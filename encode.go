@@ -160,9 +160,7 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 			href = filepath.ToSlash(rel)
 		}
 		item := manifestItem{ID: a.ID, Href: href, MediaType: a.MimeType}
-		if coverAssetID != "" && a.ID == coverAssetID {
-			item.Properties = "cover-image"
-		}
+		item.Properties = manifestProperties(a, coverAssetID)
 		items = append(items, item)
 	}
 	items = append(items, manifestItem{ID: "nav", Href: navHref, MediaType: "application/xhtml+xml", Properties: "nav"})
@@ -340,6 +338,22 @@ func writePackageAndAssets(zw *zip.Writer, doc *Document, cfg encodeConfig) erro
 	return nil
 }
 
+func manifestProperties(asset *Asset, coverAssetID string) string {
+	if asset == nil {
+		return ""
+	}
+	properties := make([]string, 0, 2)
+	if strings.HasPrefix(asset.ID, "xhtml-") && strings.Contains(strings.ToLower(asset.MimeType), "xhtml") {
+		// Generated image pages embed SVG and must advertise that fact to EPUB
+		// reading systems, as required by the manifest properties vocabulary.
+		properties = append(properties, "svg")
+	}
+	if coverAssetID != "" && asset.ID == coverAssetID {
+		properties = append(properties, "cover-image")
+	}
+	return strings.Join(properties, " ")
+}
+
 func spreadToProperty(spread string) string {
 	switch spread {
 	case "left":
@@ -481,27 +495,7 @@ func buildNavigationDocument(doc *Document, coverAssetID string) (string, error)
 		tocItems = []navListItem{{Anchor: navLandmarkAnchor{Href: "#", Text: "Start"}}}
 	}
 
-	coverHref := resolveCoverPageHref(doc, coverAssetID)
-	if coverHref == "" && len(doc.Pages) > 0 {
-		first := strings.TrimSpace(doc.Pages[0].Href)
-		if first != "" {
-			coverHref = strings.TrimPrefix(first, "item/")
-		}
-	}
-	if coverHref == "" {
-		coverHref = "#"
-	}
-
-	bodyHref := "#"
-	if len(doc.Pages) > 0 {
-		first := strings.TrimSpace(doc.Pages[0].Href)
-		if first != "" {
-			bodyHref = strings.TrimPrefix(first, "item/")
-		}
-	}
-	if bodyHref == "" {
-		bodyHref = "#"
-	}
+	landmarks := buildLandmarkItems(doc, coverAssetID)
 
 	navDoc := navDocument{
 		Head: navDocHead{Title: "Navigation"},
@@ -518,10 +512,7 @@ func buildNavigationDocument(doc *Document, coverAssetID string) (string, error)
 				ID:          "landmarks",
 				HeadingTag:  "h2",
 				HeadingText: "Landmarks",
-				Items: []navListItem{
-					{Anchor: navLandmarkAnchor{EpubType: "cover", Href: coverHref, Text: "Cover"}},
-					{Anchor: navLandmarkAnchor{EpubType: "bodymatter", Href: bodyHref, Text: "Body"}},
-				},
+				Items:       landmarks,
 			},
 		},
 	}
@@ -531,6 +522,57 @@ func buildNavigationDocument(doc *Document, coverAssetID string) (string, error)
 		return "", err
 	}
 	return xml.Header + string(b), nil
+}
+
+// buildLandmarkItems turns the page-level structural semantic into EPUB
+// landmarks. Explicit page semantics win; compatibility fallbacks ensure every
+// generated document still has cover and bodymatter landmarks.
+func buildLandmarkItems(doc *Document, coverAssetID string) []navListItem {
+	items := make([]navListItem, 0, len(doc.Pages)+2)
+	seen := make(map[string]struct{})
+	add := func(semantic, href, title string) {
+		semantic = strings.TrimSpace(semantic)
+		if semantic == "" {
+			return
+		}
+		if _, exists := seen[semantic]; exists {
+			return
+		}
+		if href = strings.TrimPrefix(strings.TrimSpace(href), "item/"); href == "" {
+			href = "#"
+		}
+		seen[semantic] = struct{}{}
+		items = append(items, navListItem{Anchor: navLandmarkAnchor{EpubType: semantic, Href: href, Text: title}})
+	}
+
+	for ordinal, page := range doc.Pages {
+		if page == nil {
+			continue
+		}
+		semantic := strings.TrimSpace(string(page.Type))
+		if semantic == "" {
+			continue
+		}
+		add(semantic, page.Href, pageNavigationTitle(page, ordinal+1))
+	}
+
+	if _, exists := seen[string(PageTypeCover)]; !exists {
+		add(string(PageTypeCover), resolveCoverPageHref(doc, coverAssetID), "Cover")
+	}
+	if _, exists := seen[string(PageTypeBodymatter)]; !exists {
+		bodyHref := ""
+		for _, page := range doc.Pages {
+			if page != nil && page.Type != PageTypeCover {
+				bodyHref = page.Href
+				break
+			}
+		}
+		if bodyHref != "" {
+			add(string(PageTypeBodymatter), bodyHref, "Body")
+		}
+	}
+
+	return items
 }
 
 func buildLegacyNCX(doc *Document, identifier string) (string, error) {

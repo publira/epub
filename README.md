@@ -8,6 +8,8 @@ An EPUB parsing and generation library built around `io.ReaderAt` and `io.Writer
 - Fail-fast: returns `DecodeError` immediately on structural violations
 - Memory efficient: on-demand stream access via `Asset.Open`
 - Strict validation: EBPAJ/KADOKAWA-style naming and directory checks
+- Fixed-layout image pages: SVG wrappers preserve page-fit across reading systems
+- Structural semantics: cover, table of contents, bodymatter, index, and glossary landmarks
 
 ## Quick Start
 

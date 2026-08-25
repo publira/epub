@@ -121,6 +121,87 @@ func TestEncode_GeneratesNavigationDocument(t *testing.T) {
 	if !strings.Contains(opfContent, `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav">`) {
 		t.Fatalf("opf nav manifest item missing: %s", opfContent)
 	}
+	if !strings.Contains(opfContent, `media-type="application/xhtml+xml" properties="svg"`) {
+		t.Fatalf("generated SVG wrapper is not declared in the manifest: %s", opfContent)
+	}
+}
+
+func TestEncode_StructuralSemanticsLandmarks(t *testing.T) {
+	doc := &Document{
+		Metadata: Metadata{Title: "Structural semantics"},
+		Layout:   LayoutPrePaginated,
+	}
+	png := testPNGBytes()
+
+	cover, _, err := doc.SetCover(bytes.NewReader(png), int64(len(png)))
+	if err != nil {
+		t.Fatalf("SetCover failed: %v", err)
+	}
+	body, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset body failed: %v", err)
+	}
+	body.Type = PageTypeBodymatter
+	index, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "left")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset index failed: %v", err)
+	}
+	index.Type = PageTypeIndex
+	glossary, _, err := doc.AddPageWithAsset(bytes.NewReader(png), int64(len(png)), "right")
+	if err != nil {
+		t.Fatalf("AddPageWithAsset glossary failed: %v", err)
+	}
+	glossary.Type = PageTypeGlossary
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	nav := readZipEntry(t, out.Bytes(), "item/nav.xhtml")
+	for _, want := range []string{
+		`epub:type="cover" href="xhtml/p-001.xhtml"`,
+		`epub:type="bodymatter" href="xhtml/p-002.xhtml"`,
+		`epub:type="index" href="xhtml/p-003.xhtml"`,
+		`epub:type="glossary" href="xhtml/p-004.xhtml"`,
+	} {
+		if !strings.Contains(nav, want) {
+			t.Fatalf("landmark %q missing:\n%s", want, nav)
+		}
+	}
+
+	coverXHTML := readZipEntry(t, out.Bytes(), cover.Href)
+	if !strings.Contains(coverXHTML, `<body epub:type="cover">`) {
+		t.Fatalf("cover wrapper semantic is missing:\n%s", coverXHTML)
+	}
+
+	decoded, err := Decode(bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+	for i, want := range []PageType{PageTypeCover, PageTypeBodymatter, PageTypeIndex, PageTypeGlossary} {
+		if got := decoded.Pages[i].Type; got != want {
+			t.Fatalf("decoded page %d semantic = %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestEncode_CoverOnlyOmitsBodymatterLandmark(t *testing.T) {
+	doc := &Document{Metadata: Metadata{Title: "Cover only"}, Layout: LayoutPrePaginated}
+	png := testPNGBytes()
+	if _, _, err := doc.SetCover(bytes.NewReader(png), int64(len(png))); err != nil {
+		t.Fatalf("SetCover failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Encode(&out, doc); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	nav := readZipEntry(t, out.Bytes(), "item/nav.xhtml")
+	if strings.Contains(nav, `epub:type="bodymatter"`) {
+		t.Fatalf("cover-only document must not contain a bodymatter landmark:\n%s", nav)
+	}
 }
 
 func TestEncode_WithLegacyTOC_GeneratesNCXWithMatchingUID(t *testing.T) {
@@ -506,7 +587,7 @@ func TestEncodeDecode_CoverImageRoundTrip(t *testing.T) {
 
 func TestSetCover(t *testing.T) {
 	doc := &Document{
-		Metadata:  Metadata{Title: "SetCover Test"},
+		Metadata:  Metadata{Title: "SetCover Test", RenditionSpread: "none"},
 		Direction: "rtl",
 		Layout:    LayoutPrePaginated,
 	}
@@ -542,6 +623,13 @@ func TestSetCover(t *testing.T) {
 	var out bytes.Buffer
 	if err := Encode(&out, doc); err != nil {
 		t.Fatalf("Encode failed: %v", err)
+	}
+	opf := readZipEntry(t, out.Bytes(), "item/standard.opf")
+	if !strings.Contains(opf, `<meta property="rendition:spread">none</meta>`) {
+		t.Fatalf("rendition:spread=none is missing:\n%s", opf)
+	}
+	if !strings.Contains(opf, `<itemref idref="`+coverPage.AssetID+`" properties="rendition:page-spread-center">`) {
+		t.Fatalf("cover page-spread-center property is missing:\n%s", opf)
 	}
 	decoded, err := Decode(bytes.NewReader(out.Bytes()), int64(out.Len()))
 	if err != nil {

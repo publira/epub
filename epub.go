@@ -240,6 +240,10 @@ func (d *Document) AddAsset(mimeType string, r io.ReaderAt, size int64) (string,
 // behavior consistent across readers (including Apple Books).
 // If page creation fails after asset registration, created assets are rolled back.
 func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*Page, *Asset, error) {
+	return d.addPageWithAsset(r, size, spread, PageTypeStandard)
+}
+
+func (d *Document) addPageWithAsset(r io.ReaderAt, size int64, spread string, pageType PageType) (*Page, *Asset, error) {
 	mimeType, width, height, err := detectAssetMeta(r, size)
 	if err != nil {
 		return nil, nil, err
@@ -250,7 +254,7 @@ func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*
 		return nil, nil, err
 	}
 
-	xhtmlHref, xhtmlAsset, err := d.addXHTMLPageAsset(assetHref, asset.ID, width, height)
+	xhtmlHref, xhtmlAsset, err := d.addXHTMLPageAsset(assetHref, asset.ID, width, height, pageType)
 	if err != nil {
 		delete(d.Assets, assetHref)
 		return nil, nil, err
@@ -264,6 +268,7 @@ func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*
 	}
 	page.AssetID = xhtmlAsset.ID
 	page.Href = xhtmlHref
+	page.Type = pageType
 
 	return page, asset, nil
 }
@@ -272,14 +277,12 @@ func (d *Document) AddPageWithAsset(r io.ReaderAt, size int64, spread string) (*
 // in both the metadata (properties="cover-image") and the spine (PageTypeCover).
 // The cover page is inserted at the beginning of Pages (Order 0).
 func (d *Document) SetCover(r io.ReaderAt, size int64) (*Page, *Asset, error) {
-	page, asset, err := d.AddPageWithAsset(r, size, "center")
+	page, asset, err := d.addPageWithAsset(r, size, "center", PageTypeCover)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	d.Metadata.CoverAssetID = asset.ID
-	page.Type = PageTypeCover
-
 	// Move cover page to front of Pages.
 	if len(d.Pages) > 1 {
 		last := len(d.Pages) - 1
@@ -294,7 +297,7 @@ func (d *Document) SetCover(r io.ReaderAt, size int64) (*Page, *Asset, error) {
 	return page, asset, nil
 }
 
-func (d *Document) addXHTMLPageAsset(imageHref, imageID string, width, height int) (string, *Asset, error) {
+func (d *Document) addXHTMLPageAsset(imageHref, imageID string, width, height int, pageType PageType) (string, *Asset, error) {
 	if d == nil {
 		return "", nil, ErrNilDocument
 	}
@@ -313,7 +316,7 @@ func (d *Document) addXHTMLPageAsset(imageHref, imageID string, width, height in
 	}
 
 	imgSrc := path.Clean(path.Join("..", path.Base(path.Dir(imageHref)), path.Base(imageHref)))
-	body, err := buildXHTMLPageWrapper(width, height, imgSrc)
+	body, err := buildXHTMLPageWrapper(width, height, imgSrc, pageType)
 	if err != nil {
 		return "", nil, err
 	}
@@ -333,7 +336,7 @@ func (d *Document) addXHTMLPageAsset(imageHref, imageID string, width, height in
 	return xhtmlHref, asset, nil
 }
 
-func buildXHTMLPageWrapper(width, height int, imgSrc string) ([]byte, error) {
+func buildXHTMLPageWrapper(width, height int, imgSrc string, pageType PageType) ([]byte, error) {
 	doc := xhtmlDocument{
 		XMLNS:     "http://www.w3.org/1999/xhtml",
 		XMLNSEpub: "http://www.idpf.org/2007/ops",
@@ -344,10 +347,23 @@ func buildXHTMLPageWrapper(width, height int, imgSrc string) ([]byte, error) {
 				Content: fmt.Sprintf("width=%d, height=%d", width, height),
 			},
 			Style: "html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }\n" +
-				"img { display: block; width: 100%; height: 100%; object-fit: contain; }",
+				"svg { display: block; width: 100%; height: 100%; }",
 		},
 		Body: xhtmlBody{
-			Img: xhtmlImg{Src: imgSrc, Alt: ""},
+			EpubType: string(pageType),
+			SVG: xhtmlSVG{
+				XMLNS:               "http://www.w3.org/2000/svg",
+				XMLNSXLink:          "http://www.w3.org/1999/xlink",
+				Width:               "100%",
+				Height:              "100%",
+				ViewBox:             fmt.Sprintf("0 0 %d %d", width, height),
+				PreserveAspectRatio: "xMidYMid meet",
+				Image: xhtmlSVGImage{
+					Width:  width,
+					Height: height,
+					Href:   imgSrc,
+				},
+			},
 		},
 	}
 
@@ -440,6 +456,12 @@ const (
 	PageTypeCover PageType = "cover"
 	// PageTypeTOC marks the page as a table of contents page.
 	PageTypeTOC PageType = "toc"
+	// PageTypeIndex marks the page as an index.
+	PageTypeIndex PageType = "index"
+	// PageTypeGlossary marks the page as a glossary.
+	PageTypeGlossary PageType = "glossary"
+	// PageTypeBodymatter marks the page as the start of the main content.
+	PageTypeBodymatter PageType = "bodymatter"
 )
 
 // Page is a single reading-order entry in spine.
@@ -451,8 +473,11 @@ type Page struct {
 	Title  string
 	Width  int
 	Height int
-	Spread string   // "left", "right", "center", "none".
-	Type   PageType // Semantic role of the page.
+	Spread string // "left", "right", "center", "none".
+	// Type is the EPUB structural semantic emitted in generated navigation
+	// landmarks. Built-in values include cover, toc, index, glossary, and
+	// bodymatter; custom EPUB structural semantic terms are also supported.
+	Type PageType
 }
 
 // Asset points to a binary object referenced from EPUB manifest.

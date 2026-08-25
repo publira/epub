@@ -2,7 +2,10 @@
 
 package epub
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"strconv"
+)
 
 type containerXML struct {
 	XMLName   xml.Name           `xml:"container"`
@@ -186,12 +189,6 @@ type xhtmlMeta struct {
 	Content string   `xml:"content,attr"`
 }
 
-type xhtmlImg struct {
-	XMLName xml.Name `xml:"img"`
-	Src     string   `xml:"src,attr"`
-	Alt     string   `xml:"alt,attr"`
-}
-
 type xhtmlHead struct {
 	Title string    `xml:"title"`
 	Meta  xhtmlMeta `xml:"meta"`
@@ -199,7 +196,54 @@ type xhtmlHead struct {
 }
 
 type xhtmlBody struct {
-	Img xhtmlImg `xml:"img"`
+	EpubType string
+	SVG      xhtmlSVG
+}
+
+func (b xhtmlBody) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	start.Name = xml.Name{Local: "body"}
+	if b.EpubType != "" {
+		start.Attr = append(start.Attr, xml.Attr{Name: xml.Name{Local: "epub:type"}, Value: b.EpubType})
+	}
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+	if err := e.EncodeElement(b.SVG, xml.StartElement{Name: xml.Name{Local: "svg"}}); err != nil {
+		return err
+	}
+	return e.EncodeToken(start.End())
+}
+
+// xhtmlSVG wraps a page image in an SVG viewport. This makes the image's
+// intrinsic dimensions explicit and preserves page-fit in fixed-layout readers.
+type xhtmlSVG struct {
+	XMLName             xml.Name      `xml:"svg"`
+	XMLNS               string        `xml:"xmlns,attr"`
+	XMLNSXLink          string        `xml:"xmlns:xlink,attr"`
+	Width               string        `xml:"width,attr"`
+	Height              string        `xml:"height,attr"`
+	ViewBox             string        `xml:"viewBox,attr"`
+	PreserveAspectRatio string        `xml:"preserveAspectRatio,attr"`
+	Image               xhtmlSVGImage `xml:"image"`
+}
+
+type xhtmlSVGImage struct {
+	Width  int
+	Height int
+	Href   string
+}
+
+func (i xhtmlSVGImage) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	start.Name = xml.Name{Local: "image"}
+	start.Attr = []xml.Attr{
+		{Name: xml.Name{Local: "width"}, Value: strconv.Itoa(i.Width)},
+		{Name: xml.Name{Local: "height"}, Value: strconv.Itoa(i.Height)},
+		{Name: xml.Name{Local: "xlink:href"}, Value: i.Href},
+	}
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+	return e.EncodeToken(start.End())
 }
 
 type xhtmlDocument struct {
