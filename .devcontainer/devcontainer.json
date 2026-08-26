@@ -1,0 +1,21 @@
+{
+  "name": "epub",
+  "image": "mcr.microsoft.com/devcontainers/go:2.1.6-1.26-bookworm@sha256:1a3df7e2f24378acfb7c1048b7b018813112f280f011bad4aa9b02fff600481e",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1.1.1": {
+      "version": "2.88.1"
+    },
+    "ghcr.io/devcontainers/features/java:1.8.2": {
+      "version": "25.0.4.1",
+      "jdkDistro": "tem",
+      "installMaven": false,
+      "installGradle": false
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go"]
+    }
+  },
+  "postCreateCommand": "go mod download"
+}
