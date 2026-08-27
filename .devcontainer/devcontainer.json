@@ -5,7 +5,7 @@
     "ghcr.io/devcontainers/features/github-cli:1.1.1": {
       "version": "2.88.1"
     },
-    "ghcr.io/devcontainers/features/java:1.8.1": {
+    "ghcr.io/devcontainers/features/java:1.8.2": {
       "version": "25.0.4.1",
       "jdkDistro": "tem",
       "installMaven": false,
