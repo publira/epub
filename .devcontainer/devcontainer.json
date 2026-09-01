@@ -1,21 +1,26 @@
 {
   "name": "epub",
-  "image": "mcr.microsoft.com/devcontainers/go:2.2.2-1.26-bookworm@sha256:8bbd6e045ce3b7157fafb3794940342f5bf2e2a0432ed33a21c51bca8b069fe5",
+  "image": "ghcr.io/publira/base-images/publira-dev:2026.08.30-11@sha256:beff4d709ddda7905bc6e37dc7bc65e5969fafece05b4a7003ed7766806c4b19",
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1.1.1": {
-      "version": "2.88.1"
-    },
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0.5": {},
     "ghcr.io/devcontainers/features/java:1.8.2": {
-      "version": "25.0.4.1",
+      "version": "25.0.4",
       "jdkDistro": "tem",
       "installMaven": false,
       "installGradle": false
     }
   },
+  "mounts": [
+    "source=epub-claude-${devcontainerId},target=/home/vscode/.claude,type=volume",
+    "source=epub-codex-${devcontainerId},target=/home/vscode/.codex,type=volume",
+    "source=epub-gemini-${devcontainerId},target=/home/vscode/.gemini,type=volume",
+    "source=epub-gh-${devcontainerId},target=/home/vscode/.config/gh,type=volume",
+    "source=epub-grok-${devcontainerId},target=/home/vscode/.grok,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "extensions": ["golang.go"]
     }
   },
-  "postCreateCommand": "go mod download"
+  "postCreateCommand": ".devcontainer/post-create.sh"
 }

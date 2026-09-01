@@ -72,7 +72,7 @@ Validate a generated publication with the official W3C EPUBCheck tool:
 ```
 
 The script requires Java 11 or newer and caches EPUBCheck under `.tools/`.
-The development container includes Temurin Java 25.0.4.1.
+The development container includes Temurin Java 25.0.4.
 
 ## License
 
