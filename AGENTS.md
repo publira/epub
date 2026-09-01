@@ -140,7 +140,7 @@ navigation document, the SVG page wrappers, the ZIP layout — validate a genera
 publication against W3C EPUBCheck, the authority this library is trying to satisfy:
 
 ```bash
-go run ./cmd/epub build-images -out testdata/out.epub -title "EPUBCheck test" -direction ltr <images...>
+go run ./cmd/epub build-images -out testdata/out.epub -title "EPUBCheck test" -direction ltr path/to/p-001.jpg path/to/p-002.jpg
 ./scripts/run-epubcheck.sh testdata/out.epub
 ```
 
