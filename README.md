@@ -2,6 +2,8 @@
 
 An EPUB parsing and generation library built around `io.ReaderAt` and `io.Writer`.
 
+[![Publira on StartupScores](https://startupscores.com/badge/publira.svg?style=shield&v=combo&theme=dark)](https://startupscores.com/open-source/publira)
+
 ## Features
 
 - Filesystem-independent: `Decode` takes `io.ReaderAt` plus archive size
