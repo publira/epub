@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # renovate: datasource=github-releases depName=w3c/epubcheck versioning=semver extractVersion=^v(?<version>.*)$
-EPUBCHECK_VERSION="5.3.0"
+EPUBCHECK_VERSION="5.4.0"
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tools_dir="${repo_dir}/.tools"
