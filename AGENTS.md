@@ -148,7 +148,8 @@ The script needs Java 11 or newer; the development container ships Temurin Java 
 
 ## CI and tooling versions
 
-`.github/workflows/ci.yml` runs the matrix above on pushes to `main` and on pull requests.
+`.github/workflows/ci.yml` runs the matrix above on pushes to `main`, on pull requests, and on
+the merge groups the merge queue on `main` builds.
 When editing it, keep the conventions already in place:
 
 - Third-party actions are pinned to a commit SHA with the readable version in a trailing
