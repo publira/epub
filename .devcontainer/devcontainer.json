@@ -1,6 +1,6 @@
 {
   "name": "epub",
-  "image": "ghcr.io/publira/base-images/publira-dev:2026.10.15@sha256:925f1a4a9ab17a902ef3ef9513206d067b0221eefd04f5932118d64ea3259298",
+  "image": "ghcr.io/publira/base-images/publira-dev:2026.10.16@sha256:1ecaa06989fcbdccc2c3a5b8470531ae5d63b95476d6cb848cef2ea43ce92297",
   "features": {
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0.5": {},
     "ghcr.io/devcontainers/features/java:1.8.3": {
