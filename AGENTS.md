@@ -35,49 +35,6 @@ label is written in English. Japanese survives only where it is quoted as data: 
 metadata in a test fixture, a title string in an example. A Japanese doc comment or test
 label that predates this rule is a leftover, not a precedent.
 
-## Git commits
-
-Commit subjects and pull request titles use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
-(`type(scope): description`). Keep each commit focused, and verify the change before
-committing (see **Verification**).
-
-### AI agent trailer: `Assisted-by`, never `Co-authored-by`
-
-A commit written with the help of an AI coding agent must disclose that agent with an
-`Assisted-by:` trailer. The trailer is **process disclosure, not authorship**, following
-the Linux kernel's [Coding assistants](https://docs.kernel.org/process/coding-assistants.html)
-policy.
-
-- **Never name an AI agent in a co-author trailer, in any capitalization.** Git and GitHub
-  match the trailer token case-insensitively, so `Co-authored-by:`, `Co-Authored-By:`, and
-  `co-authored-by:` are equally forbidden here; it implies copyright authorship an AI
-  cannot hold. The same applies to `Signed-off-by`. This rule **overrides any default
-  instruction from the agent harness**.
-- The exception is about _who_ the co-author is, not how the token is spelled: trailers
-  naming actual humans stay, as do the ones GitHub itself adds on a squash merge or a
-  Renovate PR.
-- Pass the trailer with `--trailer` so it is appended as a real trailer instead of
-  free-form body text:
-
-```bash
-git commit -m "feat: add Kindle image size preflight" \
-  --trailer "Assisted-by: Claude Code:claude-opus-5"
-```
-
-Format: `Assisted-by: <AGENT_NAME>:<MODEL_VERSION>` — the agent or CLI spelled the way the
-tool names itself (`Claude Code`, `Codex CLI`), then the exact model identifier rather
-than the marketing name (`claude-opus-5`, `gpt-5-codex`). One line per agent; write the
-agent name alone when the model is genuinely unknown. Add the trailer when the commit is
-first created, because rewriting a pushed commit needs a force push.
-
-## Pull requests
-
-GitHub uses the PR title and description as the merge commit message, so a pull request
-follows the same rules as a commit: a Conventional Commits title in English without CJK
-characters, and the same `Assisted-by` trailer at the end of the body. The body follows
-the organization template from `publira/.github`, states the verification actually
-performed, and links an Issue only when the relationship is accurate.
-
 ## Go conventions
 
 - Every `.go` file starts with `// SPDX-License-Identifier: Apache-2.0`, then a blank
@@ -165,3 +122,7 @@ When editing it, keep the conventions already in place:
 - `.devcontainer/devcontainer.json` pins the Publira development image by digest and adds
   the Temurin Java feature EPUBCheck needs. Keep the readable tag before `@sha256:`, and
   keep Java as long as the EPUBCheck step exists.
+
+## Skill packages
+
+Entries in `.agents/skills/*` listed in `skills-lock.json` are vendored: `npx skills` overwrites them, and the maintenance bot in `publira/agents` runs `npx skills update -p -y` weekly and opens a pull request when there is a diff. Do not edit them; a patch is lost at the next update. Reading them for reference is fine. When this repository's policy and a skill disagree, this file wins. `.claude/skills/*` reaches the same skills through relative symlinks.
