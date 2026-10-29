@@ -165,3 +165,7 @@ When editing it, keep the conventions already in place:
 - `.devcontainer/devcontainer.json` pins the Publira development image by digest and adds
   the Temurin Java feature EPUBCheck needs. Keep the readable tag before `@sha256:`, and
   keep Java as long as the EPUBCheck step exists.
+
+## Skill packages
+
+Entries in `.agents/skills/*` listed in `skills-lock.json` are vendored: `npx skills` overwrites them, and the maintenance bot in `publira/agents` runs `npx skills update -p -y` weekly and opens a pull request when there is a diff. Do not edit them; a patch is lost at the next update. Reading them for reference is fine. When this repository's policy and a skill disagree, this file wins. `.claude/skills/*` reaches the same skills through relative symlinks.
